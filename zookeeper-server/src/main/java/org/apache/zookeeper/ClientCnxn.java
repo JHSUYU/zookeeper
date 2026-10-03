@@ -624,6 +624,8 @@ public class ClientCnxn {
                     }
                 } else {
                     Packet p = (Packet) event;
+                    // GraphChecker: the callback takes the reply.
+                    CausynthZk.answered(p.causynth);
                     int rc = 0;
                     String clientPath = p.clientPath;
                     if (p.replyHeader.getErr() != 0) {
@@ -1574,6 +1576,7 @@ public class ClientCnxn {
             null,
             watchRegistration,
             watchDeregistration);
+        boolean answered;
         synchronized (packet) {
             if (requestTimeout > 0) {
                 // Wait for request completion with timeout
@@ -1584,6 +1587,11 @@ public class ClientCnxn {
                     packet.wait();
                 }
             }
+            answered = packet.finished;
+        }
+        // GraphChecker: the caller takes the reply, if one came.
+        if (answered) {
+            CausynthZk.answered(packet.causynth);
         }
         if (r.getErr() == Code.REQUESTTIMEOUT.intValue()) {
             sendThread.abortConnection();

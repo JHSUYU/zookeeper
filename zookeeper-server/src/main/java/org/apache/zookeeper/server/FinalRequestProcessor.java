@@ -629,6 +629,9 @@ public class FinalRequestProcessor implements RequestProcessor {
 
         updateStats(request, lastOp, lastZxid);
 
+        // GraphChecker: the reply leaves under the request's own message.
+        CausynthZk.respond(zks);
+
         try {
             if (path == null || rsp == null) {
                 responseSize = cnxn.sendResponse(hdr, rsp, "response");

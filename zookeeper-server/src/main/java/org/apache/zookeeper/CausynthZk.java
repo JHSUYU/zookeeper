@@ -43,9 +43,14 @@ import org.apache.zookeeper.server.Request;
  * requests it hands on (its {@code toFlush}), so the scope its queue carried
  * is not the request's.</p>
  *
- * <p>Not wired: the response (the caller continues in its own context when
- * its packet finishes), watch notifications (a watcher runs on the client's
- * event thread), and a quorum's forwarding between servers.</p>
+ * <p>The reply is a message too, server to client (half {@code RESPONSE}):
+ * FinalRequestProcessor sends it under the request's own message, where the
+ * request was received ({@link #respond}), and the caller takes it into the
+ * context it called from when its packet finishes ({@link #answered}: the
+ * synchronous caller's thread, an asynchronous callback's event thread), so
+ * what the server did before its reply happens before what the caller does
+ * after it.  Not wired: watch notifications (a watcher runs on the client's
+ * event thread) and a quorum's forwarding between servers.</p>
  */
 public final class CausynthZk {
 
@@ -99,6 +104,42 @@ public final class CausynthZk {
         }
         return MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, sent.correlationId,
             sent.attemptId, MessageDoors.REQUEST, owner, false);
+    }
+
+    /**
+     * The reply to the request this thread serves leaves, under the
+     * request's own message: its producer is where the request was received.
+     * Outside a served request, nothing.
+     */
+    public static void respond(Object owner) {
+        if (!ON) {
+            return;
+        }
+        MessageDoors.Inbound serving = MessageDoors.current();
+        if (serving == null || serving.correlationId.isEmpty()) {
+            return;
+        }
+        MessageDoors.outbound(TRANSPORT, serving.correlationId, serving.attemptId,
+            MessageDoors.RESPONSE, owner, null);
+    }
+
+    /**
+     * The caller takes the reply to its request into the context it called
+     * from: no new occurrence, a RECV naming the reply, and whatever exchange
+     * the thread was serving stays served.
+     */
+    static void answered(Sent sent) {
+        if (sent == null) {
+            return;
+        }
+        MessageDoors.Inbound serving = MessageDoors.setAside();
+        try {
+            MessageDoors.endInbound(MessageDoors.received("", TRANSPORT,
+                sent.outbound.correlationId, sent.outbound.attemptId,
+                MessageDoors.RESPONSE, sent.cnxn));
+        } finally {
+            MessageDoors.restore(serving);
+        }
     }
 
     /** The stage {@link #serve} began is done with the request. */
