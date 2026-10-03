@@ -84,6 +84,14 @@
       <artifactId>junit-jupiter-engine</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- GraphChecker: without it surefire runs none of the recipes' Jupiter
+         tests (it picks the JUnit 4 provider), so no workload reports its
+         classpath. -->
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-runner</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>io.dropwizard.metrics</groupId>
       <artifactId>metrics-core</artifactId>
@@ -94,6 +102,16 @@
       <artifactId>spotbugs-annotations</artifactId>
       <scope>provided</scope>
       <optional>true</optional>
+    </dependency>
+    <!-- GraphChecker: the message doors, the known bugs' target markers and
+         the automatic cluster call it; last, so the tree's own libraries
+         win.  experiments/zookeeper/build.sh installs the jar into the
+         build's own Maven repository. -->
+    <dependency>
+      <groupId>org.example</groupId>
+      <artifactId>GraphChecker</artifactId>
+      <version>1.0-SNAPSHOT</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

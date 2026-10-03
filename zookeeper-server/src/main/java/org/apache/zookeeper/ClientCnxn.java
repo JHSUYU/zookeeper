@@ -289,6 +289,9 @@ public class ClientCnxn {
 
         WatchDeregistration watchDeregistration;
 
+        /** GraphChecker: the request's message, put on the wire once numbered. */
+        CausynthZk.Sent causynth;
+
         /** Convenience ctor */
         Packet(
             RequestHeader requestHeader,
@@ -321,6 +324,9 @@ public class ClientCnxn {
                 this.bb = ByteBuffer.wrap(baos.toByteArray());
                 this.bb.putInt(this.bb.capacity() - 4);
                 this.bb.rewind();
+                if (causynth != null) {
+                    causynth.wire(requestHeader.getXid());
+                }
             } catch (IOException e) {
                 LOG.warn("Unexpected exception", e);
             }
@@ -1658,6 +1664,7 @@ public class ClientCnxn {
         packet.clientPath = clientPath;
         packet.serverPath = serverPath;
         packet.watchDeregistration = watchDeregistration;
+        packet.causynth = CausynthZk.request(this, h);
         // The synchronized block here is for two purpose:
         // 1. synchronize with the final cleanup() in SendThread.run() to avoid race
         // 2. synchronized against each packet. So if a closeSession packet is added,

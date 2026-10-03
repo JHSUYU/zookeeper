@@ -31,6 +31,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.jute.Record;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.DeleteContainerRequest;
 import org.apache.zookeeper.KeeperException;
@@ -756,18 +757,24 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
      * @param request
      */
     protected void pRequest(Request request) throws RequestProcessorException {
-        request.setHdr(null);
-        request.setTxn(null);
+        // GraphChecker: this stage serves the request's own message.
+        Object causynth = CausynthZk.serve(request, zks, false);
+        try {
+            request.setHdr(null);
+            request.setTxn(null);
 
-        if (!request.isThrottled()) {
-          pRequestHelper(request);
+            if (!request.isThrottled()) {
+              pRequestHelper(request);
+            }
+
+            request.zxid = zks.getZxid();
+            long timeFinishedPrepare = Time.currentElapsedTime();
+            ServerMetrics.getMetrics().PREP_PROCESS_TIME.add(timeFinishedPrepare - request.prepStartTime);
+            nextProcessor.processRequest(request);
+            ServerMetrics.getMetrics().PROPOSAL_PROCESS_TIME.add(Time.currentElapsedTime() - timeFinishedPrepare);
+        } finally {
+            CausynthZk.served(causynth);
         }
-
-        request.zxid = zks.getZxid();
-        long timeFinishedPrepare = Time.currentElapsedTime();
-        ServerMetrics.getMetrics().PREP_PROCESS_TIME.add(timeFinishedPrepare - request.prepStartTime);
-        nextProcessor.processRequest(request);
-        ServerMetrics.getMetrics().PROPOSAL_PROCESS_TIME.add(Time.currentElapsedTime() - timeFinishedPrepare);
     }
 
     /**

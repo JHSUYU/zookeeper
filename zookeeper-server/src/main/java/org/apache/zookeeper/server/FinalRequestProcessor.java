@@ -19,6 +19,7 @@
 package org.apache.zookeeper.server;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,9 +27,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.apache.jute.Record;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
+import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.SessionMovedException;
 import org.apache.zookeeper.MultiOperationRecord;
 import org.apache.zookeeper.MultiResponse;
@@ -145,6 +148,16 @@ public class FinalRequestProcessor implements RequestProcessor {
     }
 
     public void processRequest(Request request) {
+        // GraphChecker: this stage serves the request's own message.
+        Object causynth = CausynthZk.serve(request, zks, true);
+        try {
+            processServed(request);
+        } finally {
+            CausynthZk.served(causynth);
+        }
+    }
+
+    private void processServed(Request request) {
         LOG.debug("Processing request:: {}", request);
 
         if (LOG.isTraceEnabled()) {
@@ -671,7 +684,11 @@ public class FinalRequestProcessor implements RequestProcessor {
         String path = getDataRequest.getPath();
         DataNode n = zks.getZKDatabase().getNode(path);
         if (n == null) {
-            throw new KeeperException.NoNodeException();
+            // GraphChecker: a read of a node a client listed or created and
+            // does not find -- a quota's stat after a failed initialization
+            // (zk-bugs-quota-init), an election offer deleted after it was
+            // listed (zk-bugs-election-offer).
+            throw new @CausynthExceptionTarget("zk-bugs-quota-init,zk-bugs-election-offer") NoNodeException();
         }
         zks.checkACL(cnxn, zks.getZKDatabase().aclForNode(n), ZooDefs.Perms.READ, authInfo, path, null);
         Stat stat = new Stat();

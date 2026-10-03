@@ -211,7 +211,7 @@ public abstract class ClientBase extends ZKTestCase {
 
     protected TestableZooKeeper createClient(CountdownWatcher watcher, String hp, int timeout) throws IOException, InterruptedException {
         watcher.reset();
-        TestableZooKeeper zk = new TestableZooKeeper(hp, timeout, watcher);
+        TestableZooKeeper zk = new TestableZooKeeper(hp, CausynthZkCluster.sessionTimeout(timeout), watcher);
         if (!watcher.clientConnected.await(timeout, TimeUnit.MILLISECONDS)) {
             if (exceptionOnFailedConnect) {
                 throw new ProtocolException("Unable to connect to server");
@@ -230,6 +230,9 @@ public abstract class ClientBase extends ZKTestCase {
                 // test done - close the zk, not needed
                 zk.close();
             }
+        }
+        if (CausynthZkCluster.automatic()) {
+            CausynthZkCluster.registerClient(zk);
         }
 
         return zk;
@@ -430,10 +433,16 @@ public abstract class ClientBase extends ZKTestCase {
         LOG.info("STARTING server instance 127.0.0.1:{}", port);
         ZooKeeperServer zks = new ZooKeeperServer(dataDir, dataDir, 3000);
         zks.setCreateSessionTrackerServerId(serverId);
+        if (CausynthZkCluster.automatic()) {
+            CausynthZkCluster.configure(zks);
+        }
         factory.startup(zks);
         assertTrue(
             ClientBase.waitForServerUp("127.0.0.1:" + port, CONNECTION_TIMEOUT, factory.isSecure(), zkConfig),
             "waiting for server up");
+        if (CausynthZkCluster.automatic()) {
+            CausynthZkCluster.registerServer(zks);
+        }
     }
 
     /**
@@ -616,6 +625,9 @@ public abstract class ClientBase extends ZKTestCase {
     @AfterEach
     public void tearDown() throws Exception {
         LOG.info("tearDown starting");
+        if (CausynthZkCluster.automatic()) {
+            CausynthZkCluster.endTest();
+        }
 
         tearDownAll();
 

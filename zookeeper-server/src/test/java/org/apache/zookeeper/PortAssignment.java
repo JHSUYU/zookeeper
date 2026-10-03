@@ -20,6 +20,7 @@ package org.apache.zookeeper;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -68,6 +69,11 @@ public final class PortAssignment {
                 System.getProperty("test.junit.threads"),
                 threadId != null ? "threadid=" + threadId : System.getProperty("sun.java.command"));
             nextPort = portRange.getMinimum();
+            if (CausynthZk.automatic()) {
+                // GraphChecker: the replays of one case share a host, so each
+                // starts at a port of its own.
+                nextPort += ThreadLocalRandom.current().nextInt(portRange.getMaximum() - nextPort);
+            }
         }
         int candidatePort = nextPort;
         for (; ; ) {
