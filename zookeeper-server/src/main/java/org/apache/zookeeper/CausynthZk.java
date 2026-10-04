@@ -44,13 +44,15 @@ import org.apache.zookeeper.server.Request;
  * is not the request's.</p>
  *
  * <p>The reply is a message too, server to client (half {@code RESPONSE}):
- * FinalRequestProcessor sends it under the request's own message, where the
- * request was received ({@link #respond}), and the caller takes it into the
- * context it called from when its packet finishes ({@link #answered}: the
- * synchronous caller's thread, an asynchronous callback's event thread), so
- * what the server did before its reply happens before what the caller does
- * after it.  Not wired: watch notifications (a watcher runs on the client's
- * event thread) and a quorum's forwarding between servers.</p>
+ * FinalRequestProcessor sends it under the request's own message, the
+ * exchange its stage serves ({@link #respond}), and the caller takes it into
+ * the context it called from when its packet finishes with the server's
+ * reply ({@link #answered}: the synchronous caller's thread, an asynchronous
+ * callback's event thread), so what the server did before its reply happens
+ * before what the caller does after it.  A packet a lost connection finished
+ * took no reply, and orders nothing.  Not wired: watch notifications (a
+ * watcher runs on the client's event thread) and a quorum's forwarding
+ * between servers.</p>
  */
 public final class CausynthZk {
 
@@ -107,15 +109,12 @@ public final class CausynthZk {
     }
 
     /**
-     * The reply to the request this thread serves leaves, under the
-     * request's own message: its producer is where the request was received.
-     * Outside a served request, nothing.
+     * The reply to the request {@code exchange} serves ({@link #serve}'s)
+     * leaves, under the request's own message: its producer is where the
+     * request was received.  Outside a served request, nothing.
      */
-    public static void respond(Object owner) {
-        if (!ON) {
-            return;
-        }
-        MessageDoors.Inbound serving = MessageDoors.current();
+    public static void respond(Object exchange, Object owner) {
+        MessageDoors.Inbound serving = (MessageDoors.Inbound) exchange;
         if (serving == null || serving.correlationId.isEmpty()) {
             return;
         }
@@ -125,11 +124,12 @@ public final class CausynthZk {
 
     /**
      * The caller takes the reply to its request into the context it called
-     * from: no new occurrence, a RECV naming the reply, and whatever exchange
-     * the thread was serving stays served.
+     * from, if the server's reply came ({@link Sent#replied}): no new
+     * occurrence, a RECV naming the reply, and whatever exchange the thread
+     * was serving stays served.
      */
     static void answered(Sent sent) {
-        if (sent == null) {
+        if (sent == null || !sent.replied) {
             return;
         }
         MessageDoors.Inbound serving = MessageDoors.setAside();
@@ -158,10 +158,17 @@ public final class CausynthZk {
 
         private final ClientCnxn cnxn;
         private final MessageDoors.Outbound outbound;
+        /** Set where the server's reply to the request was read. */
+        private volatile boolean replied;
 
         private Sent(ClientCnxn cnxn, MessageDoors.Outbound outbound) {
             this.cnxn = cnxn;
             this.outbound = outbound;
+        }
+
+        /** The server's reply came, before its packet finishes. */
+        void replied() {
+            replied = true;
         }
 
         /** The request goes on the wire as {@code xid} of the session. */

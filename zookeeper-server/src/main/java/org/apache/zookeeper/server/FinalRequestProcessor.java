@@ -151,13 +151,13 @@ public class FinalRequestProcessor implements RequestProcessor {
         // GraphChecker: this stage serves the request's own message.
         Object causynth = CausynthZk.serve(request, zks, true);
         try {
-            processServed(request);
+            processServed(request, causynth);
         } finally {
             CausynthZk.served(causynth);
         }
     }
 
-    private void processServed(Request request) {
+    private void processServed(Request request, Object causynth) {
         LOG.debug("Processing request:: {}", request);
 
         if (LOG.isTraceEnabled()) {
@@ -630,7 +630,7 @@ public class FinalRequestProcessor implements RequestProcessor {
         updateStats(request, lastOp, lastZxid);
 
         // GraphChecker: the reply leaves under the request's own message.
-        CausynthZk.respond(zks);
+        CausynthZk.respond(causynth, zks);
 
         try {
             if (path == null || rsp == null) {

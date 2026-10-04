@@ -624,7 +624,7 @@ public class ClientCnxn {
                     }
                 } else {
                     Packet p = (Packet) event;
-                    // GraphChecker: the callback takes the reply.
+                    // GraphChecker: the callback takes the reply, if one came.
                     CausynthZk.answered(p.causynth);
                     int rc = 0;
                     String clientPath = p.clientPath;
@@ -959,6 +959,10 @@ public class ClientCnxn {
                                           + " for a packet with details: " + packet);
                 }
 
+                // GraphChecker: the server's reply to this packet came.
+                if (packet.causynth != null) {
+                    packet.causynth.replied();
+                }
                 packet.replyHeader.setXid(replyHdr.getXid());
                 packet.replyHeader.setErr(replyHdr.getErr());
                 packet.replyHeader.setZxid(replyHdr.getZxid());
@@ -1576,7 +1580,6 @@ public class ClientCnxn {
             null,
             watchRegistration,
             watchDeregistration);
-        boolean answered;
         synchronized (packet) {
             if (requestTimeout > 0) {
                 // Wait for request completion with timeout
@@ -1587,12 +1590,9 @@ public class ClientCnxn {
                     packet.wait();
                 }
             }
-            answered = packet.finished;
         }
         // GraphChecker: the caller takes the reply, if one came.
-        if (answered) {
-            CausynthZk.answered(packet.causynth);
-        }
+        CausynthZk.answered(packet.causynth);
         if (r.getErr() == Code.REQUESTTIMEOUT.intValue()) {
             sendThread.abortConnection();
         }
