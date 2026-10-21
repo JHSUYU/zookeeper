@@ -18,6 +18,7 @@
 
 package org.apache.zookeeper.server;
 
+import org.apache.zookeeper.CausynthNodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +35,8 @@ public class ZooKeeperThread extends Thread {
     public ZooKeeperThread(String threadName) {
         super(threadName);
         setUncaughtExceptionHandler(uncaughtExceptionalHandler);
+        // GraphChecker: a thread a quorum peer's thread makes is the peer's.
+        CausynthNodes.made(this);
     }
 
     /**

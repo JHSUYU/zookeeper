@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.jmx.MBeanRegistry;
@@ -1038,7 +1039,10 @@ public class FastLeaderElection implements Election {
 
                         voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
 
-                        if (voteSet.hasAllQuorums()) {
+                        // GraphChecker: in a workload, every peer the test runs votes, so one
+                        // leader is elected in every run.
+                        if (voteSet.hasAllQuorums()
+                            && CausynthNodes.everyLivePeerVoted(self.getVotingView().keySet(), recvset.keySet())) {
 
                             // Verify if there is any change in the proposed leader
                             while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {

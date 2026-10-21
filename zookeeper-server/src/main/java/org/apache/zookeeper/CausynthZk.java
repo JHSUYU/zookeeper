@@ -89,6 +89,7 @@ public final class CausynthZk {
             || header.getType() == ZooDefs.OpCode.auth) {
             return null;
         }
+        CausynthNodes.requesting(cnxn);
         MessageDoors.Outbound outbound = MessageDoors.outbound(TRANSPORT,
             "zk-" + REQUESTS.incrementAndGet(), ATTEMPT, MessageDoors.REQUEST, cnxn, null);
         return outbound.active() ? new Sent(cnxn, outbound) : null;
