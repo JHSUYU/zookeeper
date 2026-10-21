@@ -624,8 +624,6 @@ public class ClientCnxn {
                     }
                 } else {
                     Packet p = (Packet) event;
-                    // GraphChecker: the callback takes the reply, if one came.
-                    CausynthZk.taken(p.causynth);
                     int rc = 0;
                     String clientPath = p.clientPath;
                     if (p.replyHeader.getErr() != 0) {
@@ -1594,8 +1592,6 @@ public class ClientCnxn {
                 }
             }
         }
-        // GraphChecker: the caller takes the reply, if one came.
-        CausynthZk.taken(packet.causynth);
         if (r.getErr() == Code.REQUESTTIMEOUT.intValue()) {
             sendThread.abortConnection();
         }
