@@ -963,9 +963,7 @@ public class FastLeaderElection implements Election {
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
-                // GraphChecker: in a workload a LOOKING peer waits for a message alone: every
-                // peer announces itself and the in-JVM stream loses none, so no timeout re-sends.
-                Notification n = CausynthNodes.next(recvqueue, notTimeout);
+                Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
 
                 /*
                  * Sends more notifications if haven't received enough.
