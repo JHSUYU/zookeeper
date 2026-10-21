@@ -39,9 +39,10 @@ import org.apache.zookeeper.server.Request;
  * and its send thread puts it on the wire once it numbers the request
  * ({@code Sent#wire}): the context travels alongside the bytes, under the
  * session and xid the bytes carry, since client and server share the JVM.
- * The server serves it in each stage that does the request's work ({@link
- * #serve}): PrepRequestProcessor, which validates it and makes its txn, and
- * FinalRequestProcessor, which applies it and answers.  Each stage installs
+ * The server serves it where it reads it off the socket ({@link #read}), so
+ * its hand-off to the pipeline carries it, and in each stage that does the
+ * request's work ({@link #serve}): PrepRequestProcessor, which validates it
+ * and makes its txn, and FinalRequestProcessor, which applies it and answers.  Each stage installs
  * the request's own message, because SyncRequestProcessor batches the
  * requests it hands on (its {@code toFlush}), so the scope its queue carried
  * is not the request's.</p>
@@ -214,6 +215,27 @@ public final class CausynthZk {
             sent.correlationId, sent.attemptId, MessageDoors.REQUEST, owner, false);
         MessageDoors.parsed(request);
         return inbound;
+    }
+
+    /**
+     * The server reads a request of {@code cnxn}'s session off its socket
+     * ({@code header}'s xid): {@code owner} serves its message until
+     * {@link #served}, so the request's hand-off to the server's pipeline
+     * (the throttler's queue, then Prep's) carries the request's own context
+     * and not whatever the reading thread last stood in.
+     *
+     * @return the installed exchange, or null
+     */
+    public static Object read(long session, RequestHeader header, Object owner) {
+        if (!ON || header == null) {
+            return null;
+        }
+        MessageDoors.Outbound sent = WIRE.get(key(session, header.getXid()));
+        if (sent == null) {
+            return null;
+        }
+        return MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, sent.correlationId,
+            sent.attemptId, MessageDoors.REQUEST, owner, false);
     }
 
     /** The stage {@link #serve} began is done with the request. */
