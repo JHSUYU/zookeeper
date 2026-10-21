@@ -56,18 +56,18 @@ public class CausynthContainerReuseTest extends ClientBase {
         zk.delete(PATH + "/child", -1);
 
         ZooKeeperServer server = serverFactory.getZooKeeperServer();
-        ContainerManager cleanup = new ContainerManager(server.getZKDatabase(), server.firstProcessor,
-            CHECK_MS, NO_PACING) {
-            @Override
-            public void checkContainers() throws InterruptedException {
-                super.checkContainers();
-                stop();
-            }
-        };
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.registerServerWork(server, cleanup);
-        }
-        cleanup.start();
+        ContainerManager cleanup = CausynthZkCluster.serverWork(server, () -> {
+            ContainerManager manager = new ContainerManager(server.getZKDatabase(), server.firstProcessor,
+                CHECK_MS, NO_PACING) {
+                @Override
+                public void checkContainers() throws InterruptedException {
+                    super.checkContainers();
+                    stop();
+                }
+            };
+            manager.start();
+            return manager;
+        });
         try {
             Thread.sleep(SETTLE_MS);
             try {

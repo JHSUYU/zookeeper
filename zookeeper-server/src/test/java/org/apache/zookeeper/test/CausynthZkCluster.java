@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperServer;
@@ -93,18 +94,19 @@ public final class CausynthZkCluster {
 
     /**
      * Work the test runs for a registered server beside the server's own
-     * objects (a ContainerManager it makes): each of {@code parts}, the
-     * threads it keeps and those of its timers belong to the server's node.
+     * objects (a ContainerManager it makes and starts), built in the server
+     * node's startup, so every thread it creates and every task it files are
+     * the server's (as HBase's JVMClusterUtil#start starts a node's thread).
      */
-    public static synchronized void registerServerWork(ZooKeeperServer server, Object... parts) {
-        if (!SERVERS.containsKey(server)) {
-            return;
+    public static synchronized <T> T serverWork(ZooKeeperServer server, Supplier<T> build) {
+        if (!automatic() || !SERVERS.containsKey(server)) {
+            return build.get();
         }
-        for (Object part : parts) {
-            MessageDoors.registerSourceAlias(part, server);
-            for (Object thread : CausynthNodes.threadsOf(part)) {
-                MessageDoors.registerSourceAlias(thread, server);
-            }
+        long startup = MessageDoors.beginNodeStartup(server);
+        try {
+            return build.get();
+        } finally {
+            MessageDoors.endNodeStartup(startup);
         }
     }
 }
