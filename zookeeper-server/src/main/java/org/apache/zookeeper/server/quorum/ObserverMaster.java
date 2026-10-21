@@ -466,6 +466,7 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
                 s.setSoTimeout(self.tickTime * self.initLimit);
                 BufferedInputStream is = new BufferedInputStream(s.getInputStream());
                 LearnerHandler lh = new LearnerHandler(s, is, this);
+                lh.causynthEnd = CausynthQuorum.leading(self, s);
                 lh.start();
             } catch (Exception e) {
                 if (listenerRunning) {
