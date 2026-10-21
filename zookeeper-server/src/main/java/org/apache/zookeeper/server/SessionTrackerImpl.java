@@ -160,7 +160,21 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public void run() {
         try {
             while (running) {
-                long waitTime = sessionExpiryQueue.getWaitTime();
+                // GraphChecker: in a workload each look of the expirer is a turn of its own.
+                long causynth = CausynthNodes.beginTurn(this, "SESSION_EXPIRY");
+                long waitTime;
+                try {
+                    waitTime = sessionExpiryQueue.getWaitTime();
+                    if (waitTime <= 0) {
+                        for (SessionImpl s : sessionExpiryQueue.poll()) {
+                            ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                            setSessionClosing(s.sessionId);
+                            expirer.expire(s);
+                        }
+                    }
+                } finally {
+                    CausynthNodes.endTurn(causynth);
+                }
                 if (waitTime > 0) {
                     // GraphChecker: in a workload the expirer looks again when a session is added
                     // or touched (or the tracker shuts down), not when its wait times out.
@@ -169,13 +183,6 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                     } else {
                         Thread.sleep(waitTime);
                     }
-                    continue;
-                }
-
-                for (SessionImpl s : sessionExpiryQueue.poll()) {
-                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
-                    setSessionClosing(s.sessionId);
-                    expirer.expire(s);
                 }
             }
         } catch (InterruptedException e) {
