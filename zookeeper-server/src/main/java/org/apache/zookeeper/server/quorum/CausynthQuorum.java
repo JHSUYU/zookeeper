@@ -48,6 +48,10 @@ import org.apache.zookeeper.CausynthZk;
  * handler ends): the packet's processing (the sync's switch arm, {@code
  * processPacket}, the handler's switch) comes inside it.</p>
  *
+ * <p>The leader's own ACK of a proposal is a message too, from the leader to
+ * itself ({@link #ackingItself}): its log's acknowledgement completes a quorum
+ * as a learner's ACK does, and the order of the two is the commit's.</p>
+ *
  * <p>The link is the learner end's local port: the handler's remote one.
  * Each end counts the packets it writes and reads on its socket, at every
  * place a packet's bytes are written or read (the snapshot's bytes and the
@@ -129,6 +133,31 @@ public final class CausynthQuorum {
         MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, sent.correlationId, sent.attemptId,
             MessageDoors.REQUEST, end.peer, false);
         MessageDoors.parsed(packet);
+    }
+
+    /**
+     * The leader acknowledges its own proposal {@code zxid} (AckRequestProcessor,
+     * after its log has it): an ACK from the leader to itself, as a learner's ACK
+     * comes over the stream, which this thread serves until {@link #served}.
+     *
+     * @return the served exchange, or null outside a workload
+     */
+    static Object ackingItself(QuorumPeer leader, long zxid) {
+        if (!CausynthZk.automatic()) {
+            return null;
+        }
+        String correlation = "zkq-ack-" + leader.getMyId() + "-" + Long.toHexString(zxid);
+        MessageDoors.Outbound sent = MessageDoors.outboundRequest(TRANSPORT, correlation, ATTEMPT, leader, null,
+            Leader.getPacketType(Leader.ACK), null);
+        return MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, correlation, ATTEMPT,
+            MessageDoors.REQUEST, leader, false);
+    }
+
+    /** The exchange {@link #ackingItself} began is done. */
+    static void served(Object exchange) {
+        if (exchange != null) {
+            MessageDoors.endInbound((MessageDoors.Inbound) exchange);
+        }
     }
 
     /** The thread that read the stream is done with it: the last packet it read is served no longer. */
