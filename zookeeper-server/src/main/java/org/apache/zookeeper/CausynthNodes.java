@@ -135,6 +135,16 @@ public final class CausynthNodes {
         return ordered;
     }
 
+    /**
+     * The interval a session tracker's expiry runs by: {@code tickTime}, or,
+     * in a workload, {@link #NEVER_MS}, so a session asking for no expiry
+     * stands two intervals after the tracker's next, a skew of the tracker's
+     * clock the engine may choose reaching it within two turns.
+     */
+    public static int expiryInterval(int tickTime) {
+        return ON ? NEVER_MS : tickTime;
+    }
+
     /** The session timeout a client asks for: the caller's, or none. */
     public static int sessionTimeout(int timeout) {
         return ON ? NEVER_MS : timeout;
