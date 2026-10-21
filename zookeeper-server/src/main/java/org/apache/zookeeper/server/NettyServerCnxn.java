@@ -503,7 +503,13 @@ public class NettyServerCnxn extends ServerCnxn {
                             RequestHeader h = new RequestHeader();
                             ByteBufferInputStream.byteBuffer2Record(bb, h);
                             RequestRecord request = RequestRecord.fromBytes(bb.slice());
-                            zks.processPacket(this, h, request);
+                            // GraphChecker: the server takes the request's message as it reads it.
+                            Object causynth = CausynthZk.read(getSessionId(), h, zks);
+                            try {
+                                zks.processPacket(this, h, request);
+                            } finally {
+                                CausynthZk.served(causynth);
+                            }
                         } else {
                             LOG.debug("got conn req request from {}", getRemoteSocketAddress());
                             BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(bb));

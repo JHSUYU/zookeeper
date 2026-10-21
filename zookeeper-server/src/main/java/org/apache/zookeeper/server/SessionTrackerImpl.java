@@ -30,6 +30,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.SessionExpiredException;
 import org.apache.zookeeper.common.Time;
@@ -110,7 +111,8 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public SessionTrackerImpl(SessionExpirer expirer, ConcurrentMap<Long, Integer> sessionsWithTimeout, int tickTime, long serverId, ZooKeeperServerListener listener) {
         super("SessionTracker", listener);
         this.expirer = expirer;
-        this.sessionExpiryQueue = new ExpiryQueue<>(tickTime);
+        // GraphChecker: in a workload sessions expire by the NEVER_MS interval (CausynthNodes#expiryInterval).
+        this.sessionExpiryQueue = new ExpiryQueue<>(CausynthNodes.expiryInterval(tickTime));
         this.sessionsWithTimeout = sessionsWithTimeout;
         this.nextSessionId.set(initializeNextSessionId(serverId));
         for (Entry<Long, Integer> e : sessionsWithTimeout.entrySet()) {
@@ -160,7 +162,13 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
             while (running) {
                 long waitTime = sessionExpiryQueue.getWaitTime();
                 if (waitTime > 0) {
-                    Thread.sleep(waitTime);
+                    // GraphChecker: in a workload the expirer looks again when a session is added
+                    // or touched (or the tracker shuts down), not when its wait times out.
+                    if (CausynthNodes.automatic()) {
+                        causynthAwaitChange();
+                    } else {
+                        Thread.sleep(waitTime);
+                    }
                     continue;
                 }
 
@@ -196,6 +204,26 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     private void updateSessionExpiry(SessionImpl s, int timeout) {
         logTraceTouchSession(s.sessionId, timeout, "");
         sessionExpiryQueue.update(s, timeout);
+        causynthChanged();
+    }
+
+    /** GraphChecker: in a workload, the session changes the expirer has to look at, and those it looked at. */
+    private long causynthChanges;
+    private long causynthSeen;
+
+    /** GraphChecker: a session was added, touched, or the tracker shuts down: the expirer looks again. */
+    private synchronized void causynthChanged() {
+        if (CausynthNodes.automatic()) {
+            causynthChanges++;
+            notifyAll();
+        }
+    }
+
+    private synchronized void causynthAwaitChange() throws InterruptedException {
+        while (running && causynthSeen == causynthChanges) {
+            wait();
+        }
+        causynthSeen = causynthChanges;
     }
 
     private void logTraceTouchSession(long sessionId, int timeout, String sessionStatus) {
@@ -253,6 +281,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         LOG.info("Shutting down");
 
         running = false;
+        causynthChanged();
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG, ZooTrace.getTextTraceLevel(), "Shutdown SessionTrackerImpl!");
         }

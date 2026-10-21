@@ -400,7 +400,13 @@ public class NIOServerCnxn extends ServerCnxn {
         RequestHeader h = new RequestHeader();
         ByteBufferInputStream.byteBuffer2Record(incomingBuffer, h);
         RequestRecord request = RequestRecord.fromBytes(incomingBuffer.slice());
-        zkServer.processPacket(this, h, request);
+        // GraphChecker: the server takes the request's message as it reads it.
+        Object causynth = CausynthZk.read(getSessionId(), h, zkServer);
+        try {
+            zkServer.processPacket(this, h, request);
+        } finally {
+            CausynthZk.served(causynth);
+        }
     }
 
     // returns whether we are interested in writing, which is determined

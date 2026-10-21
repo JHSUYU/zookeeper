@@ -95,6 +95,8 @@ public final class CausynthNodes {
     private static final Map<ZooKeeperServer, Boolean> ROLE_SERVERS = new WeakHashMap<>();
     /** The server ids the test has started and not shut down. */
     private static final Set<Long> LIVE = ConcurrentHashMap.newKeySet();
+    /** The construction this thread runs, until its peer's start ends it. */
+    private static final ThreadLocal<Startup> CONSTRUCTION = new ThreadLocal<>();
     /** The peer this thread runs for, carried to every thread it starts. */
     private static final InheritableThreadLocal<QuorumPeer> RUNNING = new InheritableThreadLocal<>();
     private static final Object STARTUP_CLIENT = new Object();
@@ -131,6 +133,16 @@ public final class CausynthNodes {
             ordered.sort(Comparator.comparingLong(sid));
         }
         return ordered;
+    }
+
+    /**
+     * The interval a session tracker's expiry runs by: {@code tickTime}, or,
+     * in a workload, {@link #NEVER_MS}, so a session asking for no expiry
+     * stands two intervals after the tracker's next, a skew of the tracker's
+     * clock the engine may choose reaching it within two turns.
+     */
+    public static int expiryInterval(int tickTime) {
+        return ON ? NEVER_MS : tickTime;
     }
 
     /** The session timeout a client asks for: the caller's, or none. */
@@ -192,9 +204,10 @@ public final class CausynthNodes {
      * A peer of server {@code sid} is about to be constructed and started
      * from its configuration (QuorumPeerMain): its next life begins, and the
      * construction runs as that life's node startup, up to the end of the
-     * peer's run.
+     * peer's start ({@link #started}), not of its run, which the thread then
+     * joins.
      *
-     * @return what {@link #constructed} ends, or null
+     * @return what {@link #constructed} ends, if the start has not, or null
      */
     public static Object constructing(long sid) {
         if (!ON) {
@@ -205,12 +218,15 @@ public final class CausynthNodes {
             node = life(sid);
             CONSTRUCTED.add(sid);
         }
-        return new Startup(RUNNING.get(), MessageDoors.beginNodeStartup(node));
+        Startup construction = new Startup(RUNNING.get(), MessageDoors.beginNodeStartup(node));
+        CONSTRUCTION.set(construction);
+        return construction;
     }
 
-    /** The construction {@link #constructing} began is over. */
+    /** The construction {@link #constructing} began is over, if its peer's start did not end it. */
     public static void constructed(Object startup) {
-        if (startup != null) {
+        if (startup != null && CONSTRUCTION.get() == startup) {
+            CONSTRUCTION.remove();
             MessageDoors.endNodeStartup(((Startup) startup).token);
         }
     }
@@ -245,6 +261,7 @@ public final class CausynthNodes {
         } else {
             RUNNING.set(ended.caller);
         }
+        constructed(CONSTRUCTION.get());
     }
 
     /** A role's server, made for {@code peer} in an election, is the peer's. */
