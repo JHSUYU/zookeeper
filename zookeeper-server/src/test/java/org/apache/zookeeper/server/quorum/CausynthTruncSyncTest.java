@@ -94,8 +94,8 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
             aheadRc.set(rc);
             aheadDone.countDown();
         }, null);
-        await("the follower did not log the held create", () -> harness.ackHeldFrom(follower));
-        long ahead = harness.heldZxid();
+        harness.awaitAckFrom(follower);
+        long ahead = harness.trackedZxid();
 
         restart(follower, () -> harness.pauseForwardingOnce(follower));
         harness.awaitForwardingPaused();
@@ -104,27 +104,23 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         harness.releaseForwarding();
         assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS), "the held create did not finish");
         assertEquals(Code.OK.intValue(), aheadRc.get());
+        harness.awaitSync(follower, peers[follower]);
 
-        assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[follower], CONNECTION_TIMEOUT),
-            "the follower did not rejoin");
-        await("the follower did not apply the held create", () -> has(follower, "/ahead"));
+        harness.noteAcksOf("/after");
         client.create("/after", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        long after = peers[leader].getQuorumPeer().getZkDb().getDataTreeLastProcessedZxid();
-        assertEquals(ahead + 1, after, "the follow-up create should be the next transaction");
-        await("the follower did not apply the follow-up create",
-            () -> has(follower, "/after"));
+        harness.awaitAckFrom(follower);
+        assertEquals(ahead + 1, harness.trackedZxid(), "the follow-up create should be the next transaction");
 
         restart(follower, () -> { });
-        assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[follower], CONNECTION_TIMEOUT),
-            "the follower did not restart");
+        harness.awaitSync(follower, peers[follower]);
         assertTrue(has(follower, "/ahead") && has(follower, "/after"), "the restarted follower lost a create");
     }
 
+    /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life, synced as the leader sees. */
     private void restart(int sid, Runnable beforeStart) throws InterruptedException {
         peers[sid].shutdown();
-        assertTrue(ClientBase.waitForServerDown("127.0.0.1:" + clientPorts[sid], CONNECTION_TIMEOUT),
-            "server " + sid + " did not stop");
         beforeStart.run();
+        harness.expectSync(sid);
         peers[sid].start();
     }
 
