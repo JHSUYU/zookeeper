@@ -123,6 +123,7 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
 
         peers[follower].start();
         harness.awaitSync(follower, peers[follower]);
+        harness.awaitAckFrom(follower);
         harness.releaseAcks();
         assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
             "the held create did not finish");
