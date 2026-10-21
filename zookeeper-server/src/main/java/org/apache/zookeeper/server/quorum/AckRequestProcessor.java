@@ -45,6 +45,7 @@ class AckRequestProcessor implements RequestProcessor {
         if (self != null) {
             request.logLatency(ServerMetrics.getMetrics().PROPOSAL_ACK_CREATION_LATENCY);
             // GraphChecker: the leader's own ACK is a message to itself, served around its processing.
+            Object logged = CausynthQuorum.servingLogged(self, request);
             Object ack = CausynthQuorum.ackingItself(self, request.zxid);
             long turn = CausynthQuorum.acking(self);
             try {
@@ -52,6 +53,7 @@ class AckRequestProcessor implements RequestProcessor {
             } finally {
                 CausynthQuorum.acked(turn);
                 CausynthQuorum.served(ack);
+                CausynthQuorum.served(logged);
             }
         } else {
             LOG.error("Null QuorumPeer");

@@ -40,6 +40,8 @@ public class SendAckRequestProcessor implements RequestProcessor, Flushable {
     public void processRequest(Request si) {
         if (si.type != OpCode.sync) {
             QuorumPacket qp = new QuorumPacket(Leader.ACK, si.getHdr().getZxid(), null, null);
+            // GraphChecker: the ACK leaves under the message the txn was logged under.
+            Object logged = CausynthQuorum.servingLogged(learner.self, si);
             try {
                 si.logLatency(ServerMetrics.getMetrics().PROPOSAL_ACK_CREATION_LATENCY);
 
@@ -47,6 +49,8 @@ public class SendAckRequestProcessor implements RequestProcessor, Flushable {
             } catch (IOException e) {
                 LOG.warn("Closing connection to leader, exception during packet send", e);
                 learner.closeSocket();
+            } finally {
+                CausynthQuorum.served(logged);
             }
         }
     }
