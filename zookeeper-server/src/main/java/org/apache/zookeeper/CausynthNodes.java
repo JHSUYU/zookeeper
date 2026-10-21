@@ -54,17 +54,19 @@ import org.apache.zookeeper.server.quorum.QuorumPeer;
  * ZooKeeperThread's constructor): each peer thread carries its peer to the
  * threads it starts.</p>
  *
- * <p>The window opens on the test's thread with one request ({@code test}):
- * where a ClientBase test made its first client, else at the first request
- * a client queues on a thread of the test in a JVM running a quorum, once
- * the test has waited for the quorum to serve; a case that records the
- * ensemble's start opens it as the test starts the first peer, under a
- * client of its own.  It closes as the test tears down.</p>
+ * <p>The window opens on the test's thread with one request ({@code test}),
+ * at the first of: a ClientBase test's first client; the test's ensemble up
+ * ({@link #ensembleUp}: an ensemble base's start, its harness the test's
+ * client node); the first request a client queues on a thread of the test in
+ * a JVM running a quorum, which the test makes once its quorum serves.  A
+ * case that records the ensemble's start opens it as the test starts the
+ * first peer, under a client of its own.  It closes as the test tears
+ * down.</p>
  *
- * <p>An election ends only once every peer the test has started, and not
- * shut down since, has voted ({@link #everyLivePeerVoted}): the server with
- * the highest id among them leads, whichever peers happened to be up when a
- * quorum of them agreed.</p>
+ * <p>An election ends only once every peer started, and not shut down since,
+ * has voted ({@link #everyLivePeerVoted}): the server with the highest id
+ * among them leads, whichever peers happened to be up when a quorum of them
+ * agreed.</p>
  */
 public final class CausynthNodes {
 
@@ -194,20 +196,23 @@ public final class CausynthNodes {
         }
     }
 
-    /** The test starts the peer of server {@code sid}; a case recording the start opens its window. */
-    public static void peerStarting(long sid) {
-        if (!ON) {
+    /** The test starts a peer: a case that records the ensemble's start opens its window. */
+    public static void ensembleStarting() {
+        if (ON && MessageDoors.startupWindow()) {
+            ensembleUp(STARTUP_CLIENT);
+        }
+    }
+
+    /**
+     * The test's ensemble is up ({@code harness} started it): the window
+     * opens on this thread, the harness the test's client.
+     */
+    public static synchronized void ensembleUp(Object harness) {
+        if (!ON || opened || closed) {
             return;
         }
-        LIVE.add(sid);
-        if (MessageDoors.startupWindow()) {
-            synchronized (CausynthNodes.class) {
-                if (!opened && !closed) {
-                    MessageDoors.registerNode(STARTUP_CLIENT, CLIENT, "ZK_CLIENT", nextClient());
-                    openWindow(STARTUP_CLIENT);
-                }
-            }
-        }
+        MessageDoors.registerNode(harness, CLIENT, "ZK_CLIENT", nextClient());
+        openWindow(harness);
     }
 
     /** The test shuts the peer down. */

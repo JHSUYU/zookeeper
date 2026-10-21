@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.TestableZooKeeper;
 import org.apache.zookeeper.server.quorum.Election;
@@ -132,6 +133,8 @@ public class QuorumBase extends ClientBase {
         s5dir = ClientBase.createTmpDir();
 
         startServers(withObservers, withOracle);
+        // GraphChecker: the ensemble is up.
+        CausynthNodes.ensembleUp(this);
 
         OSMXBean osMbean = new OSMXBean();
         if (osMbean.getUnix()) {

@@ -105,8 +105,6 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
 
         File baseDir;
         private int myid;
-        /** GraphChecker: the server id, whichever constructor made the thread. */
-        private final long causynthSid;
         private int clientPort;
         private String quorumCfgSection;
         private Map<String, String> otherConfigs;
@@ -124,7 +122,6 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
         public MainThread(int myid, int clientPort, String quorumCfgSection, Map<String, String> otherConfigs, int tickTime) throws IOException {
             baseDir = ClientBase.createTmpDir();
             this.myid = myid;
-            this.causynthSid = myid;
             this.clientPort = clientPort;
             this.quorumCfgSection = quorumCfgSection;
             this.otherConfigs = otherConfigs;
@@ -211,7 +208,6 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
 
         public MainThread(int myid, int clientPort, int adminServerPort, Integer secureClientPort, String quorumCfgSection, String configs, String peerType, boolean writeDynamicConfigFile, String version) throws IOException {
             tmpDir = ClientBase.createTmpDir();
-            this.causynthSid = myid;
             LOG.info("id = {} tmpDir = {} clientPort = {} adminServerPort = {}", myid, tmpDir, clientPort, adminServerPort);
 
             File dataDir = new File(tmpDir, "data");
@@ -323,8 +319,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
         Thread currentThread;
 
         public synchronized void start() {
-            // GraphChecker: the test starts this server.
-            CausynthNodes.peerStarting(causynthSid);
+            // GraphChecker: a case recording the ensemble's start opens its window.
+            CausynthNodes.ensembleStarting();
             main = getTestQPMain();
             currentThread = new Thread(this);
             currentThread.start();
@@ -337,8 +333,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
          */
 
         public synchronized void start(final TestQPMain testQPMain) {
-            // GraphChecker: the test starts this server.
-            CausynthNodes.peerStarting(causynthSid);
+            // GraphChecker: a case recording the ensemble's start opens its window.
+            CausynthNodes.ensembleStarting();
             main = testQPMain;
             currentThread = new Thread(this);
             currentThread.start();
@@ -568,6 +564,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
         }
 
         waitForAll(svrs, ZooKeeper.States.CONNECTED);
+        // GraphChecker: the ensemble is up.
+        CausynthNodes.ensembleUp(svrs);
 
         return svrs;
     }
