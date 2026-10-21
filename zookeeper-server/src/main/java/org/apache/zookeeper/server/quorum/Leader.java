@@ -1436,7 +1436,13 @@ public class Leader extends LearnerMaster {
     public void waitForStartup() throws InterruptedException {
         synchronized (zk) {
             while (!zk.isRunning() && !Thread.currentThread().isInterrupted()) {
-                zk.wait(20);
+                // GraphChecker: in a workload a handler waits for the server's start alone (startup
+                // notifies; a handler's shutdown interrupts it), not in 20 ms polls.
+                if (CausynthNodes.automatic()) {
+                    zk.wait();
+                } else {
+                    zk.wait(20);
+                }
             }
         }
     }
