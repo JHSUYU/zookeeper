@@ -624,8 +624,6 @@ public class ClientCnxn {
                     }
                 } else {
                     Packet p = (Packet) event;
-                    // GraphChecker: the callback takes the reply, if one came.
-                    CausynthZk.answered(p.causynth);
                     int rc = 0;
                     String clientPath = p.clientPath;
                     if (p.replyHeader.getErr() != 0) {
@@ -950,6 +948,8 @@ public class ClientCnxn {
              * Since requests are processed in order, we better get a response
              * to the first request!
              */
+            // GraphChecker: the server's reply to this packet, until it is finished.
+            Object causynth = null;
             try {
                 if (packet.requestHeader.getXid() != replyHdr.getXid()) {
                     packet.replyHeader.setErr(KeeperException.Code.CONNECTIONLOSS.intValue());
@@ -959,10 +959,7 @@ public class ClientCnxn {
                                           + " for a packet with details: " + packet);
                 }
 
-                // GraphChecker: the server's reply to this packet came.
-                if (packet.causynth != null) {
-                    packet.causynth.replied();
-                }
+                causynth = CausynthZk.responded(packet.causynth);
                 packet.replyHeader.setXid(replyHdr.getXid());
                 packet.replyHeader.setErr(replyHdr.getErr());
                 packet.replyHeader.setZxid(replyHdr.getZxid());
@@ -971,11 +968,13 @@ public class ClientCnxn {
                 }
                 if (packet.response != null && replyHdr.getErr() == 0) {
                     packet.response.deserialize(bbia, "response");
+                    CausynthZk.parsed(causynth, packet.response);
                 }
 
                 LOG.debug("Reading reply session id: 0x{}, packet:: {}", Long.toHexString(sessionId), packet);
             } finally {
                 finishPacket(packet);
+                CausynthZk.handled(causynth);
             }
         }
 
@@ -1591,8 +1590,6 @@ public class ClientCnxn {
                 }
             }
         }
-        // GraphChecker: the caller takes the reply, if one came.
-        CausynthZk.answered(packet.causynth);
         if (r.getErr() == Code.REQUESTTIMEOUT.intValue()) {
             sendThread.abortConnection();
         }

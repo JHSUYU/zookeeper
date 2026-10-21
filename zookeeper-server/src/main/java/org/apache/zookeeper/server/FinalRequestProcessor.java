@@ -630,7 +630,7 @@ public class FinalRequestProcessor implements RequestProcessor {
         updateStats(request, lastOp, lastZxid);
 
         // GraphChecker: the reply leaves under the request's own message.
-        CausynthZk.respond(causynth, zks);
+        CausynthZk.respond(causynth, zks, rsp);
 
         try {
             if (path == null || rsp == null) {

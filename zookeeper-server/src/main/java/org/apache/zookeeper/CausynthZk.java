@@ -22,6 +22,7 @@ import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.jute.Record;
 import org.apache.zookeeper.proto.RequestHeader;
 import org.apache.zookeeper.server.Request;
 
@@ -43,16 +44,18 @@ import org.apache.zookeeper.server.Request;
  * requests it hands on (its {@code toFlush}), so the scope its queue carried
  * is not the request's.</p>
  *
- * <p>The reply is a message too, server to client (half {@code RESPONSE}):
- * FinalRequestProcessor sends it under the request's own message, the
- * exchange its stage serves ({@link #respond}), and the caller takes it into
- * the context it called from when its packet finishes with the server's
- * reply ({@link #answered}: the synchronous caller's thread, an asynchronous
- * callback's event thread), so what the server did before its reply happens
- * before what the caller does after it.  A packet a lost connection finished
- * took no reply, and orders nothing.  Not wired: watch notifications (a
- * watcher runs on the client's event thread) and a quorum's forwarding
- * between servers.</p>
+ * <p>The reply is a message too, server to client (half {@code RESPONSE}),
+ * the way HBase's CausynthRpc answers: FinalRequestProcessor sends it under
+ * the request's own message, the exchange its stage serves ({@link
+ * #respond}), with its reply record, and what it carries waits beside the
+ * bytes under the request's correlation; the client's send thread receives
+ * it where readResponse has the reply for the request's packet ({@link
+ * #responded}), binds the record it read ({@link #parsed}) and serves it
+ * until the packet is finished ({@link #handled}): the synchronous caller's
+ * wake-up and an asynchronous callback's queueing on the event thread come
+ * inside it.  A packet a lost connection finished took no reply.  Not wired:
+ * watch notifications (a watcher runs on the client's event thread) and a
+ * quorum's forwarding between servers.</p>
  */
 public final class CausynthZk {
 
@@ -65,6 +68,8 @@ public final class CausynthZk {
     private static final AtomicLong REQUESTS = new AtomicLong();
     /** The requests on the wire, by "session:xid": what each carries. */
     private static final Map<String, MessageDoors.Outbound> WIRE = new ConcurrentHashMap<>();
+    /** The replies on the wire, by their request's correlation: what each carries. */
+    private static final Map<String, MessageDoors.Outbound> REPLIES = new ConcurrentHashMap<>();
 
     private CausynthZk() {
     }
@@ -110,36 +115,50 @@ public final class CausynthZk {
 
     /**
      * The reply to the request {@code exchange} serves ({@link #serve}'s)
-     * leaves, under the request's own message: its producer is where the
-     * request was received.  Outside a served request, nothing.
+     * leaves with {@code reply}, under the request's own message: its
+     * producer is where the request was received.  Outside a served request,
+     * nothing.
      */
-    public static void respond(Object exchange, Object owner) {
+    public static void respond(Object exchange, Object owner, Record reply) {
         MessageDoors.Inbound serving = (MessageDoors.Inbound) exchange;
         if (serving == null || serving.correlationId.isEmpty()) {
             return;
         }
-        MessageDoors.outbound(TRANSPORT, serving.correlationId, serving.attemptId,
-            MessageDoors.RESPONSE, owner, null);
+        MessageDoors.Outbound outbound = MessageDoors.outbound(TRANSPORT, serving.correlationId,
+            serving.attemptId, MessageDoors.RESPONSE, owner, null, reply);
+        if (outbound.active()) {
+            REPLIES.put(serving.correlationId, outbound);
+        }
     }
 
     /**
-     * The caller takes the reply to its request into the context it called
-     * from, if the server's reply came ({@link Sent#replied}): no new
-     * occurrence, a RECV naming the reply, and whatever exchange the thread
-     * was serving stays served.
+     * The server's reply to the request {@code sent} sent: the send thread
+     * that read it serves it until {@link #handled}.
+     *
+     * @return the installed exchange, or null
      */
-    static void answered(Sent sent) {
-        if (sent == null || !sent.replied) {
-            return;
+    static Object responded(Sent sent) {
+        if (sent == null) {
+            return null;
         }
-        MessageDoors.Inbound serving = MessageDoors.setAside();
-        try {
-            MessageDoors.endInbound(MessageDoors.received("", TRANSPORT,
-                sent.outbound.correlationId, sent.outbound.attemptId,
-                MessageDoors.RESPONSE, sent.cnxn));
-        } finally {
-            MessageDoors.restore(serving);
+        MessageDoors.Outbound reply = REPLIES.remove(sent.outbound.correlationId);
+        if (reply == null) {
+            return null;
         }
+        return MessageDoors.inbound(reply.trace, reply.symbolic, TRANSPORT, reply.correlationId,
+            reply.attemptId, MessageDoors.RESPONSE, sent.cnxn, false);
+    }
+
+    /** The reply {@code exchange} serves was read into {@code reply}. */
+    static void parsed(Object exchange, Record reply) {
+        if (exchange != null && reply != null && MessageDoors.current() == exchange) {
+            MessageDoors.parsed(reply);
+        }
+    }
+
+    /** The packet {@link #responded} took the reply for is finished. */
+    static void handled(Object exchange) {
+        served(exchange);
     }
 
     /** The stage {@link #serve} began is done with the request. */
@@ -158,17 +177,10 @@ public final class CausynthZk {
 
         private final ClientCnxn cnxn;
         private final MessageDoors.Outbound outbound;
-        /** Set where the server's reply to the request was read. */
-        private volatile boolean replied;
 
         private Sent(ClientCnxn cnxn, MessageDoors.Outbound outbound) {
             this.cnxn = cnxn;
             this.outbound = outbound;
-        }
-
-        /** The server's reply came, before its packet finishes. */
-        void replied() {
-            replied = true;
         }
 
         /** The request goes on the wire as {@code xid} of the session. */
