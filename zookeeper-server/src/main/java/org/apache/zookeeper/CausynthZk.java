@@ -19,6 +19,8 @@
 package org.apache.zookeeper;
 
 import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -56,9 +58,16 @@ import org.apache.zookeeper.server.Request;
  * inside it.  The caller then takes the reply where it wakes ({@link
  * #taken}: a synchronous call's return, an asynchronous callback), so its
  * next request happens after the server's work.  A packet a lost
- * connection finished took no reply.  Not wired:
- * watch notifications (a watcher runs on the client's event thread) and a
- * quorum's forwarding between servers.</p>
+ * connection finished took no reply.</p>
+ *
+ * <p>In a quorum only the server the client is connected to serves the
+ * request (its {@code cnxn}): a follower or observer in its request
+ * processor, before it forwards it to the leader, which, as every other
+ * peer, gets it on the learner stream (CausynthQuorum).  A session's connect
+ * request is a message too ({@code CONNECT}, {@link #connecting}, {@link
+ * #connected}): the session the server creates for it is queued under it.
+ * Not wired: watch notifications (a watcher runs on the client's event
+ * thread) and pings.</p>
  */
 public final class CausynthZk {
 
@@ -68,9 +77,13 @@ public final class CausynthZk {
     public static final String TRANSPORT = "ZOOKEEPER";
     private static final boolean ON = Boolean.getBoolean(AUTOMATIC);
     private static final String ATTEMPT = "1";
+    private static final String CONNECT = "CONNECT";
     private static final AtomicLong REQUESTS = new AtomicLong();
     /** The requests on the wire, by "session:xid": what each carries. */
     private static final Map<String, MessageDoors.Outbound> WIRE = new ConcurrentHashMap<>();
+    /** The connect requests on the wire, by the client socket's local port: what each carries. */
+    private static final Map<Integer, MessageDoors.Outbound> CONNECTS = new ConcurrentHashMap<>();
+    private static final AtomicLong CONNECTIONS = new AtomicLong();
     /** The replies on the wire, by their request's correlation: what each carries. */
     private static final Map<String, MessageDoors.Outbound> REPLIES = new ConcurrentHashMap<>();
 
@@ -92,6 +105,7 @@ public final class CausynthZk {
             || header.getType() == ZooDefs.OpCode.auth) {
             return null;
         }
+        CausynthNodes.requesting(cnxn);
         MessageDoors.Outbound outbound = MessageDoors.outbound(TRANSPORT,
             "zk-" + REQUESTS.incrementAndGet(), ATTEMPT, MessageDoors.REQUEST, cnxn, null);
         return outbound.active() ? new Sent(cnxn, outbound) : null;
@@ -100,11 +114,14 @@ public final class CausynthZk {
     /**
      * The request's message, served by one stage of {@code owner}'s pipeline
      * until {@link #served}; the {@code last} stage takes it off the wire.
+     * Only the server the client is connected to receives it: in a quorum
+     * the leader gets a forwarded request, and the other peers its txn, on
+     * the learner stream, whose context they serve instead.
      *
      * @return the installed exchange, or null
      */
     public static Object serve(Request request, Object owner, boolean last) {
-        if (!ON) {
+        if (!ON || request.cnxn == null) {
             return null;
         }
         String key = key(request.sessionId, request.cxid);
@@ -178,6 +195,44 @@ public final class CausynthZk {
     /** The packet {@link #responded} took the reply for is finished. */
     static void handled(Object exchange) {
         served(exchange);
+    }
+
+    /**
+     * A client opens a session on a connected socket ({@code local}, its own
+     * address): the connect request leaves, a message ({@code CONNECT}) in the
+     * send thread's context, keyed by the socket's local port, which is the
+     * server's remote port for the connection.
+     */
+    static void connecting(ClientCnxn cnxn, SocketAddress local, Record request) {
+        if (!ON || !(local instanceof InetSocketAddress)) {
+            return;
+        }
+        MessageDoors.Outbound outbound = MessageDoors.outboundRequest(TRANSPORT,
+            "zkc-" + CONNECTIONS.incrementAndGet(), ATTEMPT, cnxn, null, CONNECT, request);
+        if (outbound.active()) {
+            CONNECTS.put(((InetSocketAddress) local).getPort(), outbound);
+        }
+    }
+
+    /**
+     * The server takes the connect request a client sent from {@code remote}
+     * ({@link #connecting}): {@code owner} serves it until {@link #served};
+     * the session it creates is queued under it.
+     *
+     * @return the installed exchange, or null
+     */
+    public static Object connected(InetSocketAddress remote, Object owner, Record request) {
+        if (!ON || remote == null) {
+            return null;
+        }
+        MessageDoors.Outbound sent = CONNECTS.remove(remote.getPort());
+        if (sent == null) {
+            return null;
+        }
+        MessageDoors.Inbound inbound = MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT,
+            sent.correlationId, sent.attemptId, MessageDoors.REQUEST, owner, false);
+        MessageDoors.parsed(request);
+        return inbound;
     }
 
     /** The stage {@link #serve} began is done with the request. */

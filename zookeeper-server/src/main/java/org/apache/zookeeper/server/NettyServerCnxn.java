@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.Record;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -507,7 +508,13 @@ public class NettyServerCnxn extends ServerCnxn {
                             LOG.debug("got conn req request from {}", getRemoteSocketAddress());
                             BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(bb));
                             ConnectRequest request = protocolManager.deserializeConnectRequest(bia);
-                            zks.processConnectRequest(this, request);
+                            // GraphChecker: the server takes the client's connect request.
+                            Object causynth = CausynthZk.connected(getRemoteSocketAddress(), zks, request);
+                            try {
+                                zks.processConnectRequest(this, request);
+                            } finally {
+                                CausynthZk.served(causynth);
+                            }
                             initialized = true;
                         }
                         bb = null;

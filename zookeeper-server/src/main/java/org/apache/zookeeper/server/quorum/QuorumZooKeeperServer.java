@@ -23,6 +23,7 @@ import java.io.PrintWriter;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.MultiOperationRecord;
@@ -52,6 +53,11 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         super(logFactory, tickTime, minSessionTimeout, maxSessionTimeout, listenBacklog, zkDb, self.getInitialConfig(),
               self.isReconfigEnabled());
         this.self = self;
+        // GraphChecker: the role's server is its peer's, and no session it grants expires.
+        if (CausynthNodes.automatic()) {
+            CausynthNodes.serving(self, this);
+            setMaxSessionTimeout(CausynthNodes.NEVER_MS);
+        }
     }
 
     @Override

@@ -22,6 +22,7 @@ import java.io.IOException;
 import javax.management.JMException;
 import javax.security.sasl.SaslException;
 import org.apache.yetus.audience.InterfaceAudience;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.audit.ZKAuditProvider;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.jmx.ManagedUtil;
@@ -134,7 +135,13 @@ public class QuorumPeerMain {
         purgeMgr.start();
 
         if (args.length == 1 && config.isDistributed()) {
-            runFromConfig(config);
+            // GraphChecker: the peer's construction and start are its next life's.
+            Object causynth = CausynthNodes.constructing(config.getServerId());
+            try {
+                runFromConfig(config);
+            } finally {
+                CausynthNodes.constructed(causynth);
+            }
         } else {
             LOG.warn("Either no config or no quorum defined in config, running in standalone mode");
             // there is only server in the quorum -- run as standalone

@@ -20,6 +20,7 @@ package org.apache.zookeeper.server.quorum;
 
 import java.io.IOException;
 import java.util.concurrent.LinkedBlockingQueue;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.server.Request;
@@ -74,50 +75,56 @@ public class FollowerRequestProcessor extends ZooKeeperCriticalThread implements
                     break;
                 }
 
-                // Screen quorum requests against ACLs first
-                if (!zks.authWriteRequest(request)) {
-                    continue;
-                }
-
-                // We want to queue the request to be processed before we submit
-                // the request to the leader so that we are ready to receive
-                // the response
-                maybeSendRequestToNextProcessor(request);
-
-                if (request.isThrottled()) {
-                    continue;
-                }
-
-                // We now ship the request to the leader. As with all
-                // other quorum operations, sync also follows this code
-                // path, but different from others, we need to keep track
-                // of the sync operations this follower has pending, so we
-                // add it to pendingSyncs.
-                switch (request.type) {
-                case OpCode.sync:
-                    zks.pendingSyncs.add(request);
-                    zks.getFollower().request(request);
-                    break;
-                case OpCode.create:
-                case OpCode.create2:
-                case OpCode.createTTL:
-                case OpCode.createContainer:
-                case OpCode.delete:
-                case OpCode.deleteContainer:
-                case OpCode.setData:
-                case OpCode.reconfig:
-                case OpCode.setACL:
-                case OpCode.multi:
-                case OpCode.check:
-                    zks.getFollower().request(request);
-                    break;
-                case OpCode.createSession:
-                case OpCode.closeSession:
-                    // Don't forward local sessions to the leader.
-                    if (!request.isLocalSession()) {
-                        zks.getFollower().request(request);
+                // GraphChecker: this stage serves the request's own message.
+                Object causynth = CausynthZk.serve(request, zks, false);
+                try {
+                    // Screen quorum requests against ACLs first
+                    if (!zks.authWriteRequest(request)) {
+                        continue;
                     }
-                    break;
+
+                    // We want to queue the request to be processed before we submit
+                    // the request to the leader so that we are ready to receive
+                    // the response
+                    maybeSendRequestToNextProcessor(request);
+
+                    if (request.isThrottled()) {
+                        continue;
+                    }
+
+                    // We now ship the request to the leader. As with all
+                    // other quorum operations, sync also follows this code
+                    // path, but different from others, we need to keep track
+                    // of the sync operations this follower has pending, so we
+                    // add it to pendingSyncs.
+                    switch (request.type) {
+                    case OpCode.sync:
+                        zks.pendingSyncs.add(request);
+                        zks.getFollower().request(request);
+                        break;
+                    case OpCode.create:
+                    case OpCode.create2:
+                    case OpCode.createTTL:
+                    case OpCode.createContainer:
+                    case OpCode.delete:
+                    case OpCode.deleteContainer:
+                    case OpCode.setData:
+                    case OpCode.reconfig:
+                    case OpCode.setACL:
+                    case OpCode.multi:
+                    case OpCode.check:
+                        zks.getFollower().request(request);
+                        break;
+                    case OpCode.createSession:
+                    case OpCode.closeSession:
+                        // Don't forward local sessions to the leader.
+                        if (!request.isLocalSession()) {
+                            zks.getFollower().request(request);
+                        }
+                        break;
+                    }
+                } finally {
+                    CausynthZk.served(causynth);
                 }
             }
         } catch (RuntimeException e) { // spotbugs require explicit catch of RuntimeException
