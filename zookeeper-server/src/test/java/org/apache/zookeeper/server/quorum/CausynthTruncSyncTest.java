@@ -94,7 +94,9 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
             aheadRc.set(rc);
             aheadDone.countDown();
         }, null);
-        harness.awaitAckFrom(follower);
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
+            harness.awaitAckFrom(sid);
+        }
         long ahead = harness.trackedZxid();
 
         restart(follower, () -> harness.pauseForwardingOnce(follower));

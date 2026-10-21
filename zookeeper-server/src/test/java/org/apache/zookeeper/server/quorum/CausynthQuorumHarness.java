@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -53,7 +54,9 @@ public class CausynthQuorumHarness {
     private volatile String trackedPath;
     private volatile long trackedZxid = -1;
     private final Map<Long, CountDownLatch> acks = new ConcurrentHashMap<>();
-    private volatile CountDownLatch acksReleased = new CountDownLatch(0);
+    private final Map<Long, CountDownLatch> held = new ConcurrentHashMap<>();
+    private final Map<Long, CountDownLatch> processed = new ConcurrentHashMap<>();
+    private volatile boolean holding;
     private volatile CountDownLatch committed = new CountDownLatch(1);
     private final Map<Long, CountDownLatch> synced = new ConcurrentHashMap<>();
 
@@ -69,19 +72,21 @@ public class CausynthQuorumHarness {
 
     /** Hold every ACK of the next create of {@code path} until {@link #releaseAcks()}. */
     void holdAcksOf(String path) {
-        track(path, 1);
+        track(path, true);
     }
 
     /** Note the ACKs of the next create of {@code path}, holding none. */
     void noteAcksOf(String path) {
-        track(path, 0);
+        track(path, false);
     }
 
-    private void track(String path, int holds) {
+    private void track(String path, boolean hold) {
         trackedZxid = -1;
         acks.clear();
+        held.clear();
+        processed.clear();
         committed = new CountDownLatch(1);
-        acksReleased = new CountDownLatch(holds);
+        holding = hold;
         trackedPath = path;
     }
 
@@ -97,8 +102,17 @@ public class CausynthQuorumHarness {
         return trackedZxid;
     }
 
-    void releaseAcks() {
-        acksReleased.countDown();
+    /**
+     * Release the held ACKs one at a time in server id order, each processed before the next, so the same ACK
+     * completes the quorum in every run. Await every ACK the test needs held before: one that comes later passes.
+     */
+    void releaseAcks() throws InterruptedException {
+        holding = false;
+        for (long sid : new TreeSet<>(held.keySet())) {
+            held.get(sid).countDown();
+            assertTrue(processed.computeIfAbsent(sid, unprocessed -> new CountDownLatch(1))
+                .await(WAIT_SECONDS, TimeUnit.SECONDS), "the leader did not process server " + sid + "'s ACK");
+        }
     }
 
     void releaseForwarding() {
@@ -129,7 +143,8 @@ public class CausynthQuorumHarness {
 
     void abort() {
         releaseForwarding();
-        releaseAcks();
+        holding = false;
+        held.values().forEach(CountDownLatch::countDown);
     }
 
     static void await(String message, BooleanSupplier condition) throws InterruptedException {
@@ -235,9 +250,19 @@ public class CausynthQuorumHarness {
                 if (uptodate != null) {
                     uptodate.countDown();
                 }
+            } else if (zxid == trackedZxid && holding) {
+                CountDownLatch release = new CountDownLatch(1);
+                held.put(sid, release);
+                ack(sid).countDown();
+                hold(release, "the held ACKs");
+                try {
+                    super.processAck(sid, zxid, followerAddr);
+                } finally {
+                    processed.computeIfAbsent(sid, unprocessed -> new CountDownLatch(1)).countDown();
+                }
+                return;
             } else if (zxid == trackedZxid) {
                 ack(sid).countDown();
-                hold(acksReleased, "the held ACKs");
             }
             super.processAck(sid, zxid, followerAddr);
         }
