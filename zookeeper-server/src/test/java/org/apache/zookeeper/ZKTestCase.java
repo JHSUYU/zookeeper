@@ -109,6 +109,8 @@ public class ZKTestCase {
 
     @AfterEach
     public void finished(TestInfo testInfo) {
+        // GraphChecker: the test is over, if its own tear-down did not say so.
+        CausynthNodes.endTest();
         LOG.info("FINISHED {}", testInfo.getTestMethod());
     }
 

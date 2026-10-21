@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -60,6 +61,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
 
     @AfterEach
     public void tearDown() throws Exception {
+        // GraphChecker: the test is over before its servers shut down.
+        CausynthNodes.endTest();
         if (servers == null) {
             LOG.info("No servers to shutdown!");
             return;
@@ -316,6 +319,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
         Thread currentThread;
 
         public synchronized void start() {
+            // GraphChecker: a case recording the ensemble's start opens its window.
+            CausynthNodes.ensembleStarting();
             main = getTestQPMain();
             currentThread = new Thread(this);
             currentThread.start();
@@ -328,6 +333,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
          */
 
         public synchronized void start(final TestQPMain testQPMain) {
+            // GraphChecker: a case recording the ensemble's start opens its window.
+            CausynthNodes.ensembleStarting();
             main = testQPMain;
             currentThread = new Thread(this);
             currentThread.start();
@@ -557,6 +564,8 @@ public class QuorumPeerTestBase extends ZKTestCase implements Watcher {
         }
 
         waitForAll(svrs, ZooKeeper.States.CONNECTED);
+        // GraphChecker: the ensemble is up.
+        CausynthNodes.ensembleUp(svrs);
 
         return svrs;
     }
