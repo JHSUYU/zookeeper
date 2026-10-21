@@ -237,7 +237,7 @@ public class FastLeaderElection implements Election {
                     // Sleeps on receive
                     try {
                         // GraphChecker: an idle receiver wakes only for a message.
-                        response = manager.pollRecvQueue(CausynthNodes.idleWait(3000), TimeUnit.MILLISECONDS);
+                        response = manager.nextRecv(3000);
                         if (response == null) {
                             continue;
                         }
@@ -497,7 +497,7 @@ public class FastLeaderElection implements Election {
                 while (!stop) {
                     try {
                         // GraphChecker: an idle sender wakes only for a message.
-                        ToSend m = sendqueue.poll(CausynthNodes.idleWait(3000), TimeUnit.MILLISECONDS);
+                        ToSend m = CausynthNodes.next(sendqueue, 3000);
                         if (m == null) {
                             continue;
                         }
@@ -963,7 +963,9 @@ public class FastLeaderElection implements Election {
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
-                Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
+                // GraphChecker: in a workload a LOOKING peer waits for a message alone: every
+                // peer announces itself and the in-JVM stream loses none, so no timeout re-sends.
+                Notification n = CausynthNodes.next(recvqueue, notTimeout);
 
                 /*
                  * Sends more notifications if haven't received enough.

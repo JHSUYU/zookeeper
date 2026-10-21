@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.security.sasl.SaslException;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -188,7 +189,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getLearners() {
         synchronized (learners) {
-            return new ArrayList<>(learners);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(learners, LearnerHandler::getSid);
         }
     }
 
@@ -200,7 +202,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getForwardingFollowers() {
         synchronized (forwardingFollowers) {
-            return new ArrayList<>(forwardingFollowers);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid);
         }
     }
 
@@ -233,7 +236,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getObservingLearners() {
         synchronized (observingLearners) {
-            return new ArrayList<>(observingLearners);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(observingLearners, LearnerHandler::getSid);
         }
     }
 
@@ -282,6 +286,21 @@ public class Leader extends LearnerMaster {
         synchronized (learners) {
             learners.add(learner);
         }
+        causynthTick();
+    }
+
+    /** GraphChecker: in a workload, the times the leader's quorum may have changed, and those it ticked for. */
+    private long causynthTicks;
+    private long causynthTicked;
+
+    /** GraphChecker: in a workload the leader's quorum may have changed: it ticks now. */
+    private void causynthTick() {
+        if (CausynthNodes.automatic()) {
+            synchronized (this) {
+                causynthTicks++;
+                notifyAll();
+            }
+        }
     }
 
     /**
@@ -300,6 +319,7 @@ public class Leader extends LearnerMaster {
         synchronized (observingLearners) {
             observingLearners.remove(peer);
         }
+        causynthTick();
     }
 
     boolean isLearnerSynced(LearnerHandler peer) {
@@ -777,7 +797,17 @@ public class Leader extends LearnerMaster {
                     long start = Time.currentElapsedTime();
                     long cur = start;
                     long end = start + self.tickTime / 2;
-                    while (cur < end) {
+                    if (CausynthNodes.automatic()) {
+                        // GraphChecker: in a workload the leader ticks when its quorum may
+                        // change (a learner joins or leaves, a shutdown), each wake a whole
+                        // tick: a slower replay ticks no more often than its recording.
+                        while (causynthTicked == causynthTicks) {
+                            wait();
+                        }
+                        causynthTicked = causynthTicks;
+                        tickSkip = false;
+                    }
+                    while (cur < end && !CausynthNodes.automatic()) {
                         wait(end - cur);
                         cur = Time.currentElapsedTime();
                     }
@@ -867,6 +897,7 @@ public class Leader extends LearnerMaster {
         }
 
         LOG.info("Shutdown called. For the reason {}", reason);
+        causynthTick();
 
         if (cnxAcceptor != null) {
             cnxAcceptor.halt();
@@ -1195,7 +1226,8 @@ public class Leader extends LearnerMaster {
      */
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
-            for (LearnerHandler f : forwardingFollowers) {
+            // GraphChecker: in a workload, the followers in server id order.
+            for (LearnerHandler f : CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid)) {
                 f.queuePacket(qp);
             }
         }
