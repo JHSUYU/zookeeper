@@ -101,6 +101,15 @@ public final class CausynthNodes {
         return ON;
     }
 
+    /**
+     * How long an idle quorum worker waits for its next message: the given
+     * bound, or, in a workload, until one comes (the recording and a slower
+     * replay would wake it a different number of times).
+     */
+    public static long idleWait(long ms) {
+        return ON ? NEVER_MS : ms;
+    }
+
     /** The session timeout a client asks for: the caller's, or none. */
     public static int sessionTimeout(int timeout) {
         return ON ? NEVER_MS : timeout;
