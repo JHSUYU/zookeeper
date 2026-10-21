@@ -153,6 +153,34 @@ public final class CausynthQuorum {
             MessageDoors.REQUEST, leader, false);
     }
 
+    /**
+     * The leader {@code end} serves is about to process an ACK: a turn at the
+     * leader's ACK location, so its ACKs -- a learner's on its handler, its own
+     * on its log's thread -- are processed in the recording's order, and the
+     * one that completes a quorum, under which the COMMIT leaves, stays the
+     * recorded one.  Writes no store row.
+     *
+     * @return the turn, or -1 outside a workload
+     */
+    static long acking(End end) {
+        return end == null ? -1L : acking(end.peer);
+    }
+
+    /** As {@link #acking(End)}, for the leader's own ACK. */
+    static long acking(QuorumPeer leader) {
+        if (!CausynthZk.automatic() || leader == null) {
+            return -1L;
+        }
+        return MessageDoors.storing(TRANSPORT, "acks/" + leader.getMyId());
+    }
+
+    /** The ACK {@link #acking} took the turn for is processed. */
+    static void acked(long turn) {
+        if (turn >= 0L) {
+            MessageDoors.storeEnded(TRANSPORT, turn);
+        }
+    }
+
     /** The exchange {@link #ackingItself} began is done. */
     static void served(Object exchange) {
         if (exchange != null) {
