@@ -117,6 +117,11 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         restart(follower, () -> { });
         harness.awaitSync(follower, peers[follower]);
         assertTrue(has(follower, "/ahead") && has(follower, "/after"), "the restarted follower lost a create");
+
+        // The restarted life's construction (runFromConfig, where its replay runs) ends inside the test: it returns
+        // when its peer stops, and a recorded window closes before tear-down stops it.
+        peers[follower].shutdown();
+        peers[follower].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
     }
 
     /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life. */
