@@ -237,7 +237,7 @@ public class FastLeaderElection implements Election {
                     // Sleeps on receive
                     try {
                         // GraphChecker: an idle receiver wakes only for a message.
-                        response = manager.pollRecvQueue(CausynthNodes.idleWait(3000), TimeUnit.MILLISECONDS);
+                        response = manager.nextRecv(3000);
                         if (response == null) {
                             continue;
                         }
@@ -497,7 +497,7 @@ public class FastLeaderElection implements Election {
                 while (!stop) {
                     try {
                         // GraphChecker: an idle sender wakes only for a message.
-                        ToSend m = sendqueue.poll(CausynthNodes.idleWait(3000), TimeUnit.MILLISECONDS);
+                        ToSend m = CausynthNodes.next(sendqueue, 3000);
                         if (m == null) {
                             continue;
                         }

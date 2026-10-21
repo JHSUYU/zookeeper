@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.WeakHashMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.server.ServerCnxnFactory;
@@ -106,12 +107,13 @@ public final class CausynthNodes {
     }
 
     /**
-     * How long an idle quorum worker waits for its next message: the given
-     * bound, or, in a workload, until one comes (the recording and a slower
-     * replay would wake it a different number of times).
+     * An idle quorum worker's next message: within {@code ms}, or, in a
+     * workload, whenever it comes, an untimed wait (the recording and a slower
+     * replay would wake a timed one a different number of times, each wake a
+     * turn of its own).
      */
-    public static long idleWait(long ms) {
-        return ON ? NEVER_MS : ms;
+    public static <E> E next(BlockingQueue<E> queue, long ms) throws InterruptedException {
+        return ON ? queue.take() : queue.poll(ms, TimeUnit.MILLISECONDS);
     }
 
     /** The session timeout a client asks for: the caller's, or none. */

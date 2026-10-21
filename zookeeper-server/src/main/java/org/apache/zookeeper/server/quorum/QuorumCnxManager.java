@@ -1273,7 +1273,7 @@ public class QuorumCnxManager {
                         BlockingQueue<ByteBuffer> bq = queueSendMap.get(sid);
                         if (bq != null) {
                             // GraphChecker: an idle sender wakes only for a message.
-                            b = pollSendQueue(bq, CausynthNodes.idleWait(1000), TimeUnit.MILLISECONDS);
+                            b = CausynthNodes.next(bq, 1000);
                         } else {
                             LOG.error("No queue of incoming messages for server {}", sid);
                             break;
@@ -1441,18 +1441,6 @@ public class QuorumCnxManager {
     }
 
     /**
-     * Retrieves and removes buffer at the head of this queue,
-     * waiting up to the specified wait time if necessary for an element to
-     * become available.
-     *
-     * {@link BlockingQueue#poll(long, java.util.concurrent.TimeUnit)}
-     */
-    private ByteBuffer pollSendQueue(final BlockingQueue<ByteBuffer> queue,
-          final long timeout, final TimeUnit unit) throws InterruptedException {
-       return queue.poll(timeout, unit);
-    }
-
-    /**
      * Inserts an element in the {@link #recvQueue}. If the Queue is full, this
      * methods removes an element from the head of the Queue and then inserts the
      * element at the tail of the queue.
@@ -1473,6 +1461,11 @@ public class QuorumCnxManager {
      *
      * {@link BlockingQueue#poll(long, java.util.concurrent.TimeUnit)}
      */
+    /** GraphChecker: the next message, waiting up to {@code ms}, or until one comes in a workload. */
+    public Message nextRecv(long ms) throws InterruptedException {
+        return CausynthNodes.next(recvQueue, ms);
+    }
+
     public Message pollRecvQueue(final long timeout, final TimeUnit unit)
        throws InterruptedException {
        return this.recvQueue.poll(timeout, unit);
