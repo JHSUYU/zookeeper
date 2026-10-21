@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.security.sasl.SaslException;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -188,7 +189,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getLearners() {
         synchronized (learners) {
-            return new ArrayList<>(learners);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(learners, LearnerHandler::getSid);
         }
     }
 
@@ -200,7 +202,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getForwardingFollowers() {
         synchronized (forwardingFollowers) {
-            return new ArrayList<>(forwardingFollowers);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid);
         }
     }
 
@@ -233,7 +236,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getObservingLearners() {
         synchronized (observingLearners) {
-            return new ArrayList<>(observingLearners);
+            // GraphChecker: in a workload, by server id.
+            return CausynthNodes.bySid(observingLearners, LearnerHandler::getSid);
         }
     }
 
@@ -1195,7 +1199,8 @@ public class Leader extends LearnerMaster {
      */
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
-            for (LearnerHandler f : forwardingFollowers) {
+            // GraphChecker: in a workload, the followers in server id order.
+            for (LearnerHandler f : CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid)) {
                 f.queuePacket(qp);
             }
         }

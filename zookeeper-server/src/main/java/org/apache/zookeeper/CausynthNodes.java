@@ -23,6 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -34,6 +35,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.ToLongFunction;
 import org.apache.zookeeper.server.ServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
@@ -114,6 +116,19 @@ public final class CausynthNodes {
      */
     public static <E> E next(BlockingQueue<E> queue, long ms) throws InterruptedException {
         return ON ? queue.take() : queue.poll(ms, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * {@code items} in the order a quorum hands them a packet: as the set
+     * keeps them, or, in a workload, by server id (a set of handlers keeps
+     * them by identity hash, another order every run).
+     */
+    public static <T> List<T> bySid(Collection<T> items, ToLongFunction<T> sid) {
+        List<T> ordered = new ArrayList<>(items);
+        if (ON) {
+            ordered.sort(Comparator.comparingLong(sid));
+        }
+        return ordered;
     }
 
     /** The session timeout a client asks for: the caller's, or none. */
