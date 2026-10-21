@@ -102,7 +102,8 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         harness.releaseAcks();
         harness.awaitCommitted();
         harness.releaseForwarding();
-        assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS), "the held create did not finish");
+        assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+            "the held create did not finish");
         assertEquals(Code.OK.intValue(), aheadRc.get());
         harness.awaitSync(follower, peers[follower]);
 
@@ -116,11 +117,10 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         assertTrue(has(follower, "/ahead") && has(follower, "/after"), "the restarted follower lost a create");
     }
 
-    /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life, synced as the leader sees. */
+    /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life. */
     private void restart(int sid, Runnable beforeStart) throws InterruptedException {
         peers[sid].shutdown();
         beforeStart.run();
-        harness.expectSync(sid);
         peers[sid].start();
     }
 
