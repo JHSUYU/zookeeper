@@ -289,17 +289,31 @@ public class Leader extends LearnerMaster {
         causynthTick();
     }
 
-    /** GraphChecker: in a workload, the times the leader's quorum may have changed, and those it ticked for. */
+    /**
+     * GraphChecker: in a workload, the times the leader's quorum may have changed, and those it
+     * ticked for, under a lock of their own that holds no other (callers hold the learner sets).
+     */
+    private final Object causynthTickLock = new Object();
     private long causynthTicks;
     private long causynthTicked;
 
     /** GraphChecker: in a workload the leader's quorum may have changed: it ticks now. */
     private void causynthTick() {
         if (CausynthNodes.automatic()) {
-            synchronized (this) {
+            synchronized (causynthTickLock) {
                 causynthTicks++;
-                notifyAll();
+                causynthTickLock.notifyAll();
             }
+        }
+    }
+
+    /** GraphChecker: in a workload the leader waits, holding none of its locks, for a reason to tick. */
+    private void causynthAwaitTick() throws InterruptedException {
+        synchronized (causynthTickLock) {
+            while (causynthTicked == causynthTicks) {
+                causynthTickLock.wait();
+            }
+            causynthTicked = causynthTicks;
         }
     }
 
@@ -793,18 +807,17 @@ public class Leader extends LearnerMaster {
             String shutdownMessage = null;
 
             while (true) {
+                if (CausynthNodes.automatic()) {
+                    causynthAwaitTick();
+                }
                 synchronized (this) {
                     long start = Time.currentElapsedTime();
                     long cur = start;
                     long end = start + self.tickTime / 2;
                     if (CausynthNodes.automatic()) {
                         // GraphChecker: in a workload the leader ticks when its quorum may
-                        // change (a learner joins or leaves, a shutdown), each wake a whole
-                        // tick: a slower replay ticks no more often than its recording.
-                        while (causynthTicked == causynthTicks) {
-                            wait();
-                        }
-                        causynthTicked = causynthTicks;
+                        // change (a learner joins or leaves, a shutdown: causynthAwaitTick above),
+                        // each wake a whole tick: a slower replay ticks no more often than its recording.
                         tickSkip = false;
                     }
                     while (cur < end && !CausynthNodes.automatic()) {
