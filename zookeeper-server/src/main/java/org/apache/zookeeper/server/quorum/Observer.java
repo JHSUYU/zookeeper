@@ -136,6 +136,7 @@ public class Observer extends Learner {
                 pendingRevalidations.clear();
             }
         } finally {
+            CausynthQuorum.left();
             currentLearnerMaster = null;
             zk.unregisterJMX(this);
             if (connectTime != 0) {
