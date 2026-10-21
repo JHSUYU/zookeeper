@@ -26,8 +26,8 @@ import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Timer;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.server.ZKDatabase;
@@ -113,28 +113,19 @@ public final class CausynthZkCluster {
 
     /**
      * Work the test runs for a registered server beside the server's own
-     * objects (a ContainerManager it makes): each of {@code parts}, the
-     * threads it keeps and those of its timers belong to the server's node.
+     * objects (a ContainerManager it makes and starts), built in the server
+     * node's startup, so every thread it creates and every task it files are
+     * the server's (as HBase's JVMClusterUtil#start starts a node's thread).
      */
-    public static synchronized void registerServerWork(ZooKeeperServer server, Object... parts) {
-        if (!SERVERS.containsKey(server)) {
-            return;
+    public static synchronized <T> T serverWork(ZooKeeperServer server, Supplier<T> build) {
+        if (!automatic() || !SERVERS.containsKey(server)) {
+            return build.get();
         }
-        for (Object part : parts) {
-            List<Object> aliases = new ArrayList<>();
-            aliases.add(part);
-            aliases.addAll(threadsOf(part));
-            for (Class<?> type = part.getClass(); type != Object.class; type = type.getSuperclass()) {
-                for (Field field : type.getDeclaredFields()) {
-                    Object value = read(field, part);
-                    if (value instanceof Timer) {
-                        aliases.addAll(threadsOf(value));
-                    }
-                }
-            }
-            for (Object alias : aliases) {
-                MessageDoors.registerSourceAlias(alias, server);
-            }
+        long startup = MessageDoors.beginNodeStartup(server);
+        try {
+            return build.get();
+        } finally {
+            MessageDoors.endNodeStartup(startup);
         }
     }
 
