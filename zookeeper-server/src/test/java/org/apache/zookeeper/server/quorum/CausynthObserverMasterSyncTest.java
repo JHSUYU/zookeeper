@@ -31,6 +31,7 @@ import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.server.ZKDatabase;
+import org.apache.zookeeper.server.ZooKeeperServer;
 import org.apache.zookeeper.test.ClientBase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -54,19 +55,11 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
     private final MainThread[] peers = new MainThread[OBSERVER + 1];
     private final int[] clientPorts = new int[OBSERVER + 1];
     private final int[] observerMasterPorts = new int[PARTICIPANTS + 1];
-    private ZooKeeper client;
 
+    /** Before QuorumPeerTestBase#tearDown closes the client and shuts the peers down. */
     @AfterEach
-    public void tearDown() throws Exception {
+    public void releaseHolds() {
         harness.abort();
-        if (client != null) {
-            client.close();
-        }
-        for (int sid = OBSERVER; sid >= 1; sid--) {
-            if (peers[sid] != null) {
-                peers[sid].shutdown();
-            }
-        }
     }
 
     @Test
@@ -84,7 +77,12 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             }
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
-            peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(), config(observerMasterPorts[sid]));
+            peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(),
+                config(observerMasterPorts[sid]));
+        }
+        servers = new Servers();
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3]};
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid].start();
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
@@ -96,11 +94,13 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
 
         peers[OBSERVER] = new MainThread(OBSERVER, clientPorts[OBSERVER], PortAssignment.unique(), quorumCfg.toString(),
             config(observerMasterPorts[follower]));
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3], peers[OBSERVER]};
         peers[OBSERVER].start();
         assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[OBSERVER], CONNECTION_TIMEOUT),
             "the observer did not start");
 
-        client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        ZooKeeper client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        servers.zk = new ZooKeeper[] {client};
         client.create("/warm", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         long warm = database(leader).getDataTreeLastProcessedZxid();
         await("the observer did not apply the warm-up create", () -> has(OBSERVER, "/warm"));
@@ -115,27 +115,27 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             pendingRc.set(rc);
             pendingDone.countDown();
         }, null);
-        await("the leader did not propose the held create", () -> harness.heldAcks() >= 2);
-        long pending = harness.heldZxid();
+        int otherFollower = PARTICIPANTS * (PARTICIPANTS + 1) / 2 - leader - follower;
+        harness.awaitAckFrom(leader);
+        harness.awaitAckFrom(otherFollower);
+        long pending = harness.trackedZxid();
         assertEquals(warm + 1, pending, "the held create should be the next transaction");
 
         peers[follower].start();
-        await("the restarted follower's ObserverMaster did not start with the held create pending", () -> {
-            QuorumPeer peer = peers[follower].getQuorumPeer();
-            Follower f = peer == null ? null : peer.follower;
-            return f != null && f.om != null && f.fzk.pendingTxns.stream().anyMatch(r -> r.zxid == pending);
-        });
+        harness.awaitSync(follower, peers[follower]);
+        harness.awaitAckFrom(follower);
         harness.releaseAcks();
-        assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS), "the held create did not finish");
+        assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+            "the held create did not finish");
         assertEquals(Code.OK.intValue(), pendingRc.get());
 
         peers[OBSERVER].start();
-        assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[OBSERVER], CONNECTION_TIMEOUT),
-            "the observer did not restart");
         await("the observer did not sync through the follower's ObserverMaster", () -> {
             QuorumPeer peer = peers[OBSERVER].getQuorumPeer();
             Observer o = peer == null ? null : peer.observer;
-            return o != null && o.getSocket() != null && o.getSocket().getPort() == observerMasterPorts[follower];
+            ZooKeeperServer server = peer == null ? null : peer.getActiveServer();
+            return o != null && o.getSocket() != null && o.getSocket().getPort() == observerMasterPorts[follower]
+                && server != null && server.isRunning();
         });
 
         client.create("/after", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -151,10 +151,9 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         return String.format("observerMasterPort=%d%nsnapCount=100000%nadmin.enableServer=false%n", observerMasterPort);
     }
 
+    /** QuorumBase#shutdown joins the peer: the server is down when this returns. */
     private void stop(int sid) throws InterruptedException {
         peers[sid].shutdown();
-        assertTrue(ClientBase.waitForServerDown("127.0.0.1:" + clientPorts[sid], CONNECTION_TIMEOUT),
-            "server " + sid + " did not stop");
     }
 
     private ZKDatabase database(int sid) {
@@ -172,7 +171,8 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         await(leading ? "no leader" : "no follower with an ObserverMaster", () -> {
             for (int sid = 1; sid <= PARTICIPANTS; sid++) {
                 QuorumPeer peer = peers[sid].getQuorumPeer();
-                if (peer != null && (leading ? peer.leader != null : peer.follower != null && peer.follower.om != null)) {
+                if (peer != null
+                    && (leading ? peer.leader != null : peer.follower != null && peer.follower.om != null)) {
                     found.set(sid);
                     return true;
                 }

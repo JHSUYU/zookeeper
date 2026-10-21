@@ -77,6 +77,8 @@ public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
     LinkedBlockingQueue<Request> pendingTxns = new LinkedBlockingQueue<>();
 
     public void logRequest(Request request) {
+        // GraphChecker: the txn is logged under the packet this thread serves.
+        CausynthQuorum.logging(request);
         if ((request.zxid & 0xffffffffL) != 0) {
             pendingTxns.add(request);
         }

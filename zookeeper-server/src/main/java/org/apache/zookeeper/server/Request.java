@@ -141,6 +141,9 @@ public class Request {
 
     public long zxid = -1;
 
+    /** GraphChecker: the quorum message this txn was logged under, served again where its log acknowledges it. */
+    public volatile Object causynthLogged;
+
     public final List<Id> authInfo;
 
     public final long createTime = Time.currentElapsedTime();

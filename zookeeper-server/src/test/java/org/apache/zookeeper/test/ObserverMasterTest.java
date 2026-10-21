@@ -43,6 +43,7 @@ import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 import javax.management.ReflectionException;
 import javax.management.RuntimeMBeanException;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.DummyWatcher;
 import org.apache.zookeeper.KeeperException;
@@ -242,7 +243,8 @@ public class ObserverMasterTest extends ObserverMasterTestBase {
         ZooKeeper obsZk = new ZooKeeper("127.0.0.1:" + CLIENT_PORT_OBS, ClientBase.CONNECTION_TIMEOUT, this);
         int followerPort = q1.getQuorumPeer().leader == null ? CLIENT_PORT_QP1 : CLIENT_PORT_QP2;
         ZooKeeper fZk = new ZooKeeper("127.0.0.1:" + followerPort, ClientBase.CONNECTION_TIMEOUT, this);
-        final int numTransactions = 10001;
+        // GraphChecker: a focused load in a workload, the same writes 500x fewer (zk-adhoc-10)
+        final int numTransactions = CausynthZk.automatic() ? 21 : 10001;
         CountDownLatch gate = new CountDownLatch(1);
         CountDownLatch oAsyncLatch = new CountDownLatch(numTransactions);
         Thread oAsyncWriteThread = new Thread(new AsyncWriter(obsZk, numTransactions, true, oAsyncLatch, "/obs", gate));

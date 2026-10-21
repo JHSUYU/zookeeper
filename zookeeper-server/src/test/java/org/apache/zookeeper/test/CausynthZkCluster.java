@@ -19,11 +19,14 @@
 package org.apache.zookeeper.test;
 
 import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.graphchecker.runtime.Sessions;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import org.apache.zookeeper.ZooKeeper;
 import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperServer;
@@ -49,12 +52,22 @@ import org.apache.zookeeper.server.ZooKeeperServer;
  * {@link CausynthNodes#NEVER_MS}, and a client asks for that much, so no
  * session expires and no client pings or gives up on a read while a replay
  * waits for a turn.</p>
+ *
+ * <p>A planted SessionExpired expires the session at the server that holds
+ * it ({@link #expire}): a registered server, or a quorum's role server
+ * ({@link CausynthNodes#roleServers}).</p>
  */
 public final class CausynthZkCluster {
 
     private static final String NODE = "CLUSTER_NODE";
 
     private static final Map<ZooKeeperServer, String> SERVERS = new IdentityHashMap<>();
+
+    static {
+        if (automatic()) {
+            Sessions.expirer(CausynthZkCluster::expire);
+        }
+    }
 
     private CausynthZkCluster() {
     }
@@ -108,5 +121,44 @@ public final class CausynthZkCluster {
         } finally {
             MessageDoors.endNodeStartup(startup);
         }
+    }
+
+    /**
+     * A planted SessionExpired made real ({@code Sessions#expires}), as HBase's
+     * MiniZooKeeperCluster#causynthExpire: the session of the door's client
+     * expired at the server that holds it, which deletes its ephemeral nodes;
+     * the client's next operations fail by themselves.  The server's close is
+     * awaited (bounded), so every run sees the same store after it.  False for
+     * an owner that is no ZooKeeper client, or a session no server holds.
+     */
+    static boolean expire(Object owner) {
+        if (!(owner instanceof ZooKeeper)) {
+            return false;
+        }
+        long session = ((ZooKeeper) owner).getSessionId();
+        List<ZooKeeperServer> servers;
+        synchronized (CausynthZkCluster.class) {
+            servers = new ArrayList<>(SERVERS.keySet());
+        }
+        servers.addAll(CausynthNodes.roleServers());
+        for (ZooKeeperServer server : servers) {
+            Map<Long, Integer> sessions;
+            try {
+                sessions = server.getZKDatabase().getSessionWithTimeOuts();
+            } catch (RuntimeException shutDown) {
+                continue;
+            }
+            if (!sessions.containsKey(session)) {
+                continue;
+            }
+            server.expire(session);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while ((sessions.containsKey(session) || !server.getZKDatabase().getEphemerals(session).isEmpty())
+                && System.nanoTime() < deadline) {
+                Thread.yield();
+            }
+            return true;
+        }
+        return false;
     }
 }

@@ -50,19 +50,11 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
     private final CausynthQuorumHarness harness = new CausynthQuorumHarness();
     private final MainThread[] peers = new MainThread[PARTICIPANTS + 1];
     private final int[] clientPorts = new int[PARTICIPANTS + 1];
-    private ZooKeeper client;
 
+    /** Before QuorumPeerTestBase#tearDown closes the client and shuts the peers down. */
     @AfterEach
-    public void tearDown() throws Exception {
+    public void releaseHolds() {
         harness.abort();
-        if (client != null) {
-            client.close();
-        }
-        for (int sid = PARTICIPANTS; sid >= 1; sid--) {
-            if (peers[sid] != null) {
-                peers[sid].shutdown();
-            }
-        }
     }
 
     @Test
@@ -78,6 +70,10 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(),
                 "snapCount=100000\nadmin.enableServer=false\n");
+        }
+        servers = new Servers();
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3]};
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid].start();
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
@@ -87,7 +83,8 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         int leader = role(true);
         int follower = role(false);
 
-        client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        ZooKeeper client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        servers.zk = new ZooKeeper[] {client};
         client.create("/warm", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
 
         harness.holdAcksOf("/ahead");
@@ -97,36 +94,44 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
             aheadRc.set(rc);
             aheadDone.countDown();
         }, null);
-        await("the follower did not log the held create", () -> harness.ackHeldFrom(follower));
-        long ahead = harness.heldZxid();
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
+            harness.awaitAckFrom(sid);
+        }
+        long ahead = harness.trackedZxid();
 
         restart(follower, () -> harness.pauseForwardingOnce(follower));
         harness.awaitForwardingPaused();
         harness.releaseAcks();
         harness.awaitCommitted();
         harness.releaseForwarding();
-        assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS), "the held create did not finish");
+        assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+            "the held create did not finish");
         assertEquals(Code.OK.intValue(), aheadRc.get());
+        harness.awaitSync(follower, peers[follower]);
 
-        assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[follower], CONNECTION_TIMEOUT),
-            "the follower did not rejoin");
-        await("the follower did not apply the held create", () -> has(follower, "/ahead"));
-        client.create("/after", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        long after = peers[leader].getQuorumPeer().getZkDb().getDataTreeLastProcessedZxid();
-        assertEquals(ahead + 1, after, "the follow-up create should be the next transaction");
-        await("the follower did not apply the follow-up create",
-            () -> has(follower, "/after"));
+        // Two follow-up creates: the replay of F's next life applies both, so the second runs the out-of-order guard.
+        String[] after = {"/after", "/after2"};
+        for (int i = 0; i < after.length; i++) {
+            harness.noteAcksOf(after[i]);
+            client.create(after[i], new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            harness.awaitAckFrom(follower);
+            assertEquals(ahead + 1 + i, harness.trackedZxid(), "each follow-up create should be the next transaction");
+        }
 
         restart(follower, () -> { });
-        assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[follower], CONNECTION_TIMEOUT),
-            "the follower did not restart");
-        assertTrue(has(follower, "/ahead") && has(follower, "/after"), "the restarted follower lost a create");
+        harness.awaitSync(follower, peers[follower]);
+        assertTrue(has(follower, "/ahead") && has(follower, "/after") && has(follower, "/after2"),
+            "the restarted follower lost a create");
+
+        // The restarted life's construction (runFromConfig, where its replay runs) ends inside the test: it returns
+        // when its peer stops, and a recorded window closes before tear-down stops it.
+        peers[follower].shutdown();
+        peers[follower].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
     }
 
+    /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life. */
     private void restart(int sid, Runnable beforeStart) throws InterruptedException {
         peers[sid].shutdown();
-        assertTrue(ClientBase.waitForServerDown("127.0.0.1:" + clientPorts[sid], CONNECTION_TIMEOUT),
-            "server " + sid + " did not stop");
         beforeStart.run();
         peers[sid].start();
     }

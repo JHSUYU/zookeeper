@@ -21,7 +21,8 @@ package org.apache.zookeeper.server.quorum;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.util.Set;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -41,19 +42,23 @@ import org.apache.zookeeper.txn.CreateTxn;
  * of ObserverMasterPendingProposalTest (apache/zookeeper PR 2454): a participant's leader is a {@link HeldLeader} that
  * can hold the ACKs of one create and pause one follower's startForwarding. A hold only makes an order controllable:
  * every proposal, commit, queue and zxid is the normal protocol's, and every override waits before it calls the
- * synchronized super, so no lock is held while waiting. Holds and waits are bounded by {@link #WAIT_SECONDS}, far
- * above a native run's seconds: a GraphChecker replay runs many times slower than its recording, and a native hang
- * is still bounded by the test's own timeout.
+ * synchronized super, so no lock is held while waiting. The test waits on what the leader sees, not by polling: a
+ * learner's ACK of the tracked create (it logged it) and its ACK of UPTODATE (it synced, or its life ended first).
+ * Holds and waits are bounded by {@link #WAIT_SECONDS}, far above a native run's seconds: a GraphChecker replay runs
+ * many times slower than its recording, and a native hang is still bounded by the test's own timeout.
  */
 public class CausynthQuorumHarness {
 
     static final long WAIT_SECONDS = 300;
 
-    private volatile String heldPath;
-    private volatile long heldZxid = -1;
-    private final Set<Long> heldAckSids = ConcurrentHashMap.newKeySet();
-    private volatile CountDownLatch acksReleased = new CountDownLatch(0);
+    private volatile String trackedPath;
+    private volatile long trackedZxid = -1;
+    private final Map<Long, CountDownLatch> acks = new ConcurrentHashMap<>();
+    private final Map<Long, CountDownLatch> held = new ConcurrentHashMap<>();
+    private final Map<Long, CountDownLatch> processed = new ConcurrentHashMap<>();
+    private volatile boolean holding;
     private volatile CountDownLatch committed = new CountDownLatch(1);
+    private final Map<Long, CountDownLatch> synced = new ConcurrentHashMap<>();
 
     private volatile long pausedSid = -1;
     private final AtomicBoolean pauseTaken = new AtomicBoolean(true);
@@ -67,11 +72,22 @@ public class CausynthQuorumHarness {
 
     /** Hold every ACK of the next create of {@code path} until {@link #releaseAcks()}. */
     void holdAcksOf(String path) {
-        heldZxid = -1;
-        heldAckSids.clear();
+        track(path, true);
+    }
+
+    /** Note the ACKs of the next create of {@code path}, holding none. */
+    void noteAcksOf(String path) {
+        track(path, false);
+    }
+
+    private void track(String path, boolean hold) {
+        trackedZxid = -1;
+        acks.clear();
+        held.clear();
+        processed.clear();
         committed = new CountDownLatch(1);
-        acksReleased = new CountDownLatch(1);
-        heldPath = path;
+        holding = hold;
+        trackedPath = path;
     }
 
     /** Pause the next startForwarding for follower {@code sid} until {@link #releaseForwarding()}. */
@@ -82,24 +98,39 @@ public class CausynthQuorumHarness {
         pauseTaken.set(false);
     }
 
-    long heldZxid() {
-        return heldZxid;
+    long trackedZxid() {
+        return trackedZxid;
     }
 
-    boolean ackHeldFrom(long sid) {
-        return heldAckSids.contains(sid);
-    }
-
-    int heldAcks() {
-        return heldAckSids.size();
-    }
-
-    void releaseAcks() {
-        acksReleased.countDown();
+    /**
+     * Release the held ACKs one at a time in server id order, each processed before the next, so the same ACK
+     * completes the quorum in every run. Await every ACK the test needs held before: one that comes later passes.
+     */
+    void releaseAcks() throws InterruptedException {
+        holding = false;
+        for (long sid : new TreeSet<>(held.keySet())) {
+            held.get(sid).countDown();
+            assertTrue(processed.computeIfAbsent(sid, unprocessed -> new CountDownLatch(1))
+                .await(WAIT_SECONDS, TimeUnit.SECONDS), "the leader did not process server " + sid + "'s ACK");
+        }
     }
 
     void releaseForwarding() {
         forwardingReleased.countDown();
+    }
+
+    /** Server {@code sid} logged the tracked create: the leader has its ACK (held or not). */
+    void awaitAckFrom(long sid) throws InterruptedException {
+        assertTrue(ack(sid).await(WAIT_SECONDS, TimeUnit.SECONDS), "server " + sid + " did not log the create");
+    }
+
+    /**
+     * Participant {@code sid}, in its life since its last start, finished a sync with the leader: the leader has its
+     * ACK of UPTODATE. A life whose server stops before (its run ends) ends the wait at once, and fails it.
+     */
+    void awaitSync(long sid, MainThread peer) throws InterruptedException {
+        assertTrue(synced.get(sid).await(WAIT_SECONDS, TimeUnit.SECONDS), "server " + sid + " did not sync");
+        assertTrue(peer.isAlive(), "server " + sid + " stopped before it synced");
     }
 
     void awaitForwardingPaused() throws InterruptedException {
@@ -112,7 +143,8 @@ public class CausynthQuorumHarness {
 
     void abort() {
         releaseForwarding();
-        releaseAcks();
+        holding = false;
+        held.values().forEach(CountDownLatch::countDown);
     }
 
     static void await(String message, BooleanSupplier condition) throws InterruptedException {
@@ -124,6 +156,10 @@ public class CausynthQuorumHarness {
             Thread.sleep(20);
         }
         assertTrue(condition.getAsBoolean(), message);
+    }
+
+    private CountDownLatch ack(long sid) {
+        return acks.computeIfAbsent(sid, unacked -> new CountDownLatch(1));
     }
 
     private static void hold(CountDownLatch latch, String what) {
@@ -139,8 +175,30 @@ public class CausynthQuorumHarness {
 
     private final class HeldPeer extends MainThread {
 
+        private final long sid;
+        private volatile CountDownLatch life;
+
         HeldPeer(int sid, int clientPort, String quorumCfg, String otherCfg) throws IOException {
             super(sid, clientPort, PortAssignment.unique(), quorumCfg, otherCfg);
+            this.sid = sid;
+        }
+
+        /** Each start is a life whose sync (or end) {@link #awaitSync} waits for. */
+        @Override
+        public synchronized void start() {
+            life = new CountDownLatch(1);
+            synced.put(sid, life);
+            super.start();
+        }
+
+        @Override
+        public void run() {
+            CountDownLatch mine = life;
+            try {
+                super.run();
+            } finally {
+                mine.countDown();
+            }
         }
 
         @Override
@@ -176,20 +234,35 @@ public class CausynthQuorumHarness {
 
         @Override
         public Proposal propose(Request request) throws XidRolloverException {
-            String path = heldPath;
+            String path = trackedPath;
             if (path != null && request.getTxn() instanceof CreateTxn
                     && path.equals(((CreateTxn) request.getTxn()).getPath())) {
-                heldPath = null;
-                heldZxid = request.zxid;
+                trackedPath = null;
+                trackedZxid = request.zxid;
             }
             return super.propose(request);
         }
 
         @Override
         public void processAck(long sid, long zxid, SocketAddress followerAddr) {
-            if (zxid == heldZxid) {
-                heldAckSids.add(sid);
-                hold(acksReleased, "the held ACKs");
+            if ((zxid & 0xffffffffL) == 0) {
+                CountDownLatch uptodate = synced.get(sid);
+                if (uptodate != null) {
+                    uptodate.countDown();
+                }
+            } else if (zxid == trackedZxid && holding) {
+                CountDownLatch release = new CountDownLatch(1);
+                held.put(sid, release);
+                ack(sid).countDown();
+                hold(release, "the held ACKs");
+                try {
+                    super.processAck(sid, zxid, followerAddr);
+                } finally {
+                    processed.computeIfAbsent(sid, unprocessed -> new CountDownLatch(1)).countDown();
+                }
+                return;
+            } else if (zxid == trackedZxid) {
+                ack(sid).countDown();
             }
             super.processAck(sid, zxid, followerAddr);
         }
@@ -197,7 +270,7 @@ public class CausynthQuorumHarness {
         @Override
         public synchronized boolean tryToCommit(Proposal p, long zxid, SocketAddress followerAddr) {
             boolean done = super.tryToCommit(p, zxid, followerAddr);
-            if (done && zxid == heldZxid) {
+            if (done && zxid == trackedZxid) {
                 committed.countDown();
             }
             return done;

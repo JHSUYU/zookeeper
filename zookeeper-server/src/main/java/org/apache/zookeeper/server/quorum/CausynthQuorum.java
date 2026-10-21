@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.server.Request;
 
 /**
  * GraphChecker: the learner stream, leader (or observer master) and
@@ -48,6 +49,10 @@ import org.apache.zookeeper.CausynthZk;
  * handler ends): the packet's processing (the sync's switch arm, {@code
  * processPacket}, the handler's switch) comes inside it.</p>
  *
+ * <p>The leader's own ACK of a proposal is a message too, from the leader to
+ * itself ({@link #ackingItself}): its log's acknowledgement completes a quorum
+ * as a learner's ACK does, and the order of the two is the commit's.</p>
+ *
  * <p>The link is the learner end's local port: the handler's remote one.
  * Each end counts the packets it writes and reads on its socket, at every
  * place a packet's bytes are written or read (the snapshot's bytes and the
@@ -68,6 +73,8 @@ public final class CausynthQuorum {
     private static final AtomicLong PACKETS = new AtomicLong();
     /** The packets on the wire, by "link:direction:place": what each carries. */
     private static final Map<String, Object> WIRE = new ConcurrentHashMap<>();
+    /** The packet each reading thread serves: the message it carried. */
+    private static final ThreadLocal<MessageDoors.Outbound> SERVED = new ThreadLocal<>();
 
     private CausynthQuorum() {
     }
@@ -122,20 +129,121 @@ public final class CausynthQuorum {
         }
         Object carried = WIRE.remove(end.link + ":" + end.receives + ":" + end.read.getAndIncrement());
         if (!(carried instanceof MessageDoors.Outbound)) {
+            SERVED.remove();
             MessageDoors.inbound(null, null, TRANSPORT, "", ATTEMPT, MessageDoors.REQUEST, end.peer, false);
             return;
         }
         MessageDoors.Outbound sent = (MessageDoors.Outbound) carried;
+        SERVED.set(sent);
         MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, sent.correlationId, sent.attemptId,
             MessageDoors.REQUEST, end.peer, false);
         MessageDoors.parsed(packet);
     }
 
+    /**
+     * The leader acknowledges its own proposal {@code zxid} (AckRequestProcessor,
+     * after its log has it): an ACK from the leader to itself, as a learner's ACK
+     * comes over the stream, which this thread serves until {@link #served}.
+     *
+     * @return the served exchange, or null outside a workload
+     */
+    static Object ackingItself(QuorumPeer leader, long zxid) {
+        if (!CausynthZk.automatic()) {
+            return null;
+        }
+        String correlation = "zkq-ack-" + leader.getMyId() + "-" + Long.toHexString(zxid);
+        MessageDoors.Outbound sent = MessageDoors.outboundRequest(TRANSPORT, correlation, ATTEMPT, leader, null,
+            Leader.getPacketType(Leader.ACK), null);
+        return MessageDoors.inbound(sent.trace, sent.symbolic, TRANSPORT, correlation, ATTEMPT,
+            MessageDoors.REQUEST, leader, false);
+    }
+
+    /**
+     * The leader {@code end} serves is about to process an ACK: a turn at the
+     * leader's ACK location, so its ACKs -- a learner's on its handler, its own
+     * on its log's thread -- are processed in the recording's order, and the
+     * one that completes a quorum, under which the COMMIT leaves, stays the
+     * recorded one.  Writes no store row.
+     *
+     * @return the turn, or -1 outside a workload
+     */
+    static long acking(End end) {
+        return end == null ? -1L : acking(end.peer);
+    }
+
+    /** As {@link #acking(End)}, for the leader's own ACK. */
+    static long acking(QuorumPeer leader) {
+        if (!CausynthZk.automatic() || leader == null) {
+            return -1L;
+        }
+        return MessageDoors.storing(TRANSPORT, "acks/" + leader.getMyId());
+    }
+
+    /** The ACK {@link #acking} took the turn for is processed. */
+    static void acked(long turn) {
+        if (turn >= 0L) {
+            MessageDoors.storeEnded(TRANSPORT, turn);
+        }
+    }
+
+    /** The exchange {@link #ackingItself} began is done. */
+    static void served(Object exchange) {
+        if (exchange != null) {
+            MessageDoors.endInbound((MessageDoors.Inbound) exchange);
+        }
+    }
+
     /** The thread that read the stream is done with it: the last packet it read is served no longer. */
     static void left() {
         if (CausynthZk.automatic()) {
+            SERVED.remove();
             MessageDoors.endInbound();
         }
+    }
+
+    /**
+     * A learner logs {@code request}'s txn while it serves a packet (the
+     * PROPOSAL, or the sync's UPTODATE for what the sync held): the txn keeps
+     * that packet's message, which its log's ACK leaves under ({@link
+     * #servingLogged}), whatever request the batching log thread took last.
+     */
+    static void logging(Request request) {
+        if (CausynthZk.automatic() && request != null) {
+            request.causynthLogged = SERVED.get();
+        }
+    }
+
+    /**
+     * The leader logs its own proposal {@code request}: a PROPOSAL from the
+     * leader to itself, as its learners receive one, which its log's own ACK
+     * leaves under.
+     */
+    static void proposing(QuorumPeer leader, Request request) {
+        if (!CausynthZk.automatic() || leader == null || request == null) {
+            return;
+        }
+        String correlation = "zkq-proposal-" + leader.getMyId() + "-" + Long.toHexString(request.zxid);
+        MessageDoors.Outbound sent = MessageDoors.outboundRequest(TRANSPORT, correlation, ATTEMPT, leader, null,
+            Leader.getPacketType(Leader.PROPOSAL), null);
+        if (sent.active()) {
+            request.causynthLogged = sent;
+        }
+    }
+
+    /**
+     * The log acknowledges {@code request}'s txn: this thread serves the
+     * message the txn was logged under until {@link #served}.
+     *
+     * @return the served exchange, or null
+     */
+    static Object servingLogged(QuorumPeer peer, Request request) {
+        Object logged = request == null ? null : request.causynthLogged;
+        if (!(logged instanceof MessageDoors.Outbound)) {
+            return null;
+        }
+        MessageDoors.Outbound message = (MessageDoors.Outbound) logged;
+        return MessageDoors.inbound(message.trace, message.symbolic, TRANSPORT, message.correlationId,
+            message.attemptId, MessageDoors.REQUEST, peer, false);
     }
 
     /** One end of a learner stream: its peer, its link, its counts and the packets sent but not yet written. */
