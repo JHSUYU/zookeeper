@@ -131,7 +131,10 @@ public class Leader extends LearnerMaster {
         @Override
         public QuorumPacket getQuorumPacket() {
             byte[] data = request.getSerializeData();
-            return new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
+            QuorumPacket packet = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
+            // GraphChecker: the packet carries a copy of its txn's header, made by this send.
+            CausynthQuorum.carrying(packet, CausynthQuorum.copyOf(request.getHdr()));
+            return packet;
         }
 
         @Override
@@ -1290,6 +1293,8 @@ public class Leader extends LearnerMaster {
      */
     public void inform(Proposal proposal) {
         QuorumPacket qp = new QuorumPacket(Leader.INFORM, proposal.request.zxid, proposal.packet.getData(), null);
+        // GraphChecker: the packet carries its txn's header.
+        CausynthQuorum.carrying(qp, proposal.request.getHdr());
         sendObserverPacket(qp);
     }
 
@@ -1356,6 +1361,8 @@ public class Leader extends LearnerMaster {
         byte[] data = request.getSerializeData();
         proposalStats.setLastBufferSize(data.length);
         QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
+        // GraphChecker: the packet carries its txn's header.
+        CausynthQuorum.carrying(pp, request.getHdr());
 
         Proposal p = new Proposal(request, pp);
 

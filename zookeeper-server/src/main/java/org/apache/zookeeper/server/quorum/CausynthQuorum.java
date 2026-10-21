@@ -19,14 +19,18 @@
 package org.apache.zookeeper.server.quorum;
 
 import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.net.Socket;
 import java.util.ArrayDeque;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.server.Request;
+import org.apache.zookeeper.txn.TxnHeader;
 
 /**
  * GraphChecker: the learner stream, leader (or observer master) and
@@ -75,6 +79,10 @@ public final class CausynthQuorum {
     private static final Map<String, Object> WIRE = new ConcurrentHashMap<>();
     /** The packet each reading thread serves: the message it carried. */
     private static final ThreadLocal<MessageDoors.Outbound> SERVED = new ThreadLocal<>();
+    /** The txn header each reading thread last took from a packet it served. */
+    private static final ThreadLocal<TxnHeader> PARSED = new ThreadLocal<>();
+    /** The txn packets made here, with the header each carries: its txn's zxid is the sender's. */
+    private static final Txns TXNS = new Txns();
 
     private CausynthQuorum() {
     }
@@ -128,6 +136,7 @@ public final class CausynthQuorum {
             return;
         }
         Object carried = WIRE.remove(end.link + ":" + end.receives + ":" + end.read.getAndIncrement());
+        PARSED.remove();
         if (!(carried instanceof MessageDoors.Outbound)) {
             SERVED.remove();
             MessageDoors.inbound(null, null, TRANSPORT, "", ATTEMPT, MessageDoors.REQUEST, end.peer, false);
@@ -197,6 +206,7 @@ public final class CausynthQuorum {
     static void left() {
         if (CausynthZk.automatic()) {
             SERVED.remove();
+            PARSED.remove();
             MessageDoors.endInbound();
         }
     }
@@ -246,6 +256,101 @@ public final class CausynthQuorum {
             message.attemptId, MessageDoors.REQUEST, peer, false);
     }
 
+    /**
+     * {@code packet} carries the txn of {@code header} (its data is the txn's
+     * bytes): the packet's message is the header, so its fields cross as the
+     * sender's (the door walks it), and a learner that decodes the txn from
+     * the packet takes them ({@link #parsedTxn}).
+     */
+    static void carrying(QuorumPacket packet, TxnHeader header) {
+        if (CausynthZk.automatic() && packet != null && header != null) {
+            TXNS.put(packet, header);
+        }
+    }
+
+    /**
+     * A copy of {@code header} set field by field: a txn resent from the
+     * committed log (a learner's sync) carries its fields as this send's
+     * export, not as the one that first proposed them.  Null when not
+     * automatic.
+     */
+    static TxnHeader copyOf(TxnHeader header) {
+        if (!CausynthZk.automatic() || header == null) {
+            return null;
+        }
+        TxnHeader copy = new TxnHeader();
+        copy.setClientId(header.getClientId());
+        copy.setCxid(header.getCxid());
+        copy.setZxid(header.getZxid());
+        copy.setTime(header.getTime());
+        copy.setType(header.getType());
+        return copy;
+    }
+
+    /**
+     * The thread decoded {@code header} from the packet it serves: the
+     * header's fields are the ones the packet's sender carried.  Outside a
+     * served packet (a log's replay at startup), nothing.
+     */
+    static void parsedTxn(TxnHeader header) {
+        if (!CausynthZk.automatic() || header == null || SERVED.get() == null) {
+            return;
+        }
+        PARSED.set(header);
+        MessageDoors.parsed(header);
+    }
+
+    /** The txn header this thread last took from a packet it served, or null. */
+    static TxnHeader parsedHeader() {
+        return CausynthZk.automatic() ? PARSED.get() : null;
+    }
+
+    /** The txn packets and their headers, by packet identity, held no longer than the packet. */
+    private static final class Txns {
+
+        private final Map<Held, TxnHeader> held = new HashMap<>();
+        private final ReferenceQueue<QuorumPacket> gone = new ReferenceQueue<>();
+
+        synchronized void put(QuorumPacket packet, TxnHeader header) {
+            for (Object dropped; (dropped = gone.poll()) != null; ) {
+                held.remove(dropped);
+            }
+            held.put(new Held(packet, gone), header);
+        }
+
+        synchronized TxnHeader get(QuorumPacket packet) {
+            return held.get(new Held(packet, null));
+        }
+    }
+
+    /** A packet held by identity, weakly. */
+    private static final class Held extends WeakReference<QuorumPacket> {
+
+        private final int hash;
+
+        Held(QuorumPacket packet, ReferenceQueue<QuorumPacket> gone) {
+            super(packet, gone);
+            hash = System.identityHashCode(packet);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof Held)) {
+                return false;
+            }
+            QuorumPacket packet = get();
+            return packet != null && packet == ((Held) other).get();
+        }
+    }
+
     /** One end of a learner stream: its peer, its link, its counts and the packets sent but not yet written. */
     static final class End {
 
@@ -265,8 +370,9 @@ public final class CausynthQuorum {
         }
 
         private MessageDoors.Outbound send(QuorumPacket packet) {
+            TxnHeader header = TXNS.get(packet);
             return MessageDoors.outboundRequest(TRANSPORT, "zkq-" + PACKETS.incrementAndGet(), ATTEMPT, peer,
-                null, Leader.getPacketType(packet.getType()), packet);
+                null, Leader.getPacketType(packet.getType()), header == null ? packet : header);
         }
     }
 }

@@ -355,7 +355,10 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
     }
 
     void proposalReceived(QuorumPacket qp) {
-        proposedPkts.add(new QuorumPacket(Leader.INFORM, qp.getZxid(), qp.getData(), null));
+        QuorumPacket inform = new QuorumPacket(Leader.INFORM, qp.getZxid(), qp.getData(), null);
+        // GraphChecker: the INFORM carries the header of the PROPOSAL it relays.
+        CausynthQuorum.carrying(inform, CausynthQuorum.parsedHeader());
+        proposedPkts.add(inform);
     }
 
     private synchronized QuorumPacket removeProposedPacket(long zxid) {

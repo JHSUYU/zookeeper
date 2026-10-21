@@ -670,6 +670,8 @@ public class Learner {
                     PacketInFlight pif = new PacketInFlight();
                     logEntry = SerializeUtils.deserializeTxn(qp.getData());
                     pif.hdr = logEntry.getHeader();
+                    // GraphChecker: the header the PROPOSAL carried.
+                    CausynthQuorum.parsedTxn(pif.hdr);
                     pif.rec = logEntry.getTxn();
                     pif.digest = logEntry.getDigest();
                     lastQueued = enforceContinuousProposal(lastQueued, pif);
@@ -731,6 +733,8 @@ public class Learner {
                         logEntry = SerializeUtils.deserializeTxn(qp.getData());
                         packet.rec = logEntry.getTxn();
                         packet.hdr = logEntry.getHeader();
+                        // GraphChecker: the header the INFORM carried.
+                        CausynthQuorum.parsedTxn(packet.hdr);
                         packet.digest = logEntry.getDigest();
                         lastQueued = enforceContinuousProposal(lastQueued, packet);
                     }
