@@ -94,6 +94,8 @@ public class Learner {
     protected BufferedOutputStream bufferedOutput;
 
     protected Socket sock;
+    /** GraphChecker: this learner's end of the stream on {@link #sock}. */
+    CausynthQuorum.End causynthEnd;
     protected MultipleAddresses leaderAddr;
     protected AtomicBoolean sockBeingClosed = new AtomicBoolean(false);
 
@@ -193,6 +195,7 @@ public class Learner {
      * @throws IOException
      */
     void writePacket(QuorumPacket pp, boolean flush) throws IOException {
+        CausynthQuorum.sent(causynthEnd, pp);
         if (asyncSending) {
             sender.queuePacket(pp);
         } else {
@@ -204,6 +207,7 @@ public class Learner {
         synchronized (leaderOs) {
             if (pp != null) {
                 messageTracker.trackSent(pp.getType());
+                CausynthQuorum.written(causynthEnd, pp);
                 leaderOs.writeRecord(pp, "packet");
             }
             if (flush) {
@@ -230,6 +234,7 @@ public class Learner {
     void readPacket(QuorumPacket pp) throws IOException {
         synchronized (leaderIs) {
             leaderIs.readRecord(pp, "packet");
+            CausynthQuorum.received(causynthEnd, pp);
             messageTracker.trackReceived(pp.getType());
         }
         if (LOG.isTraceEnabled()) {
@@ -239,6 +244,15 @@ public class Learner {
 
             ZooTrace.logQuorumPacket(LOG, traceMask, 'i', pp);
         }
+    }
+
+    /**
+     * GraphChecker: a packet of the sync with the leader (every read of
+     * {@link #syncWithLeader}), one call so the learner stream's fault door
+     * sits at each.
+     */
+    void readSyncPacket(QuorumPacket pp) throws IOException {
+        readPacket(pp);
     }
 
     /**
@@ -356,6 +370,7 @@ public class Learner {
         leaderIs = BinaryInputArchive.getArchive(new BufferedInputStream(sock.getInputStream()));
         bufferedOutput = new BufferedOutputStream(sock.getOutputStream());
         leaderOs = BinaryOutputArchive.getArchive(bufferedOutput);
+        causynthEnd = CausynthQuorum.learning(self, sock);
         if (asyncSending) {
             startSendingThread();
         }
@@ -578,7 +593,7 @@ public class Learner {
         // For SNAP and TRUNC the snapshot is needed to save that history
         boolean snapshotNeeded = true;
         boolean syncSnapshot = false;
-        readPacket(qp);
+        readSyncPacket(qp);
         Deque<Long> packetsCommitted = new ArrayDeque<>();
         Deque<PacketInFlight> packetsNotLogged = new ArrayDeque<>();
 
@@ -649,7 +664,7 @@ public class Learner {
             // we are now going to start getting transactions to apply followed by an UPTODATE
             outerLoop:
             while (self.isRunning()) {
-                readPacket(qp);
+                readSyncPacket(qp);
                 switch (qp.getType()) {
                 case Leader.PROPOSAL:
                     PacketInFlight pif = new PacketInFlight();

@@ -131,6 +131,7 @@ public class Follower extends Learner {
                 pendingRevalidations.clear();
             }
         } finally {
+            CausynthQuorum.left();
             if (om != null) {
                 om.stop();
             }

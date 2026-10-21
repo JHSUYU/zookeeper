@@ -572,6 +572,7 @@ public class Leader extends LearnerMaster {
 
                     BufferedInputStream is = new BufferedInputStream(socket.getInputStream());
                     LearnerHandler fh = new LearnerHandler(socket, is, Leader.this);
+                    fh.causynthEnd = CausynthQuorum.leading(self, socket);
                     fh.start();
                 } catch (SocketException e) {
                     error = true;
