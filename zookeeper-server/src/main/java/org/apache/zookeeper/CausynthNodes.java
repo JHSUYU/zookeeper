@@ -24,6 +24,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,8 @@ public final class CausynthNodes {
     /** Each peer's node by server id: one anchor for all of its lives. */
     private static final Map<Long, Object> PEERS = new HashMap<>();
     private static final Map<Object, Long> EPOCHS = new IdentityHashMap<>();
+    /** The server ids whose life began at their construction, before their peer started. */
+    private static final Set<Long> CONSTRUCTED = new HashSet<>();
     /** The server ids the test has started and not shut down. */
     private static final Set<Long> LIVE = ConcurrentHashMap.newKeySet();
     /** The peer this thread runs for, carried to every thread it starts. */
@@ -127,16 +130,7 @@ public final class CausynthNodes {
         long sid = peer.getMyId();
         Object node;
         synchronized (CausynthNodes.class) {
-            String name = PREFIX + "peer" + sid;
-            node = PEERS.get(sid);
-            if (node == null) {
-                node = new Object();
-                PEERS.put(sid, node);
-                EPOCHS.put(node, 0L);
-                MessageDoors.registerNode(node, NODE, PEER, name);
-            } else {
-                MessageDoors.restartSource(node, NODE, PEER, name, EPOCHS.merge(node, 1L, Long::sum));
-            }
+            node = CONSTRUCTED.remove(sid) ? PEERS.get(sid) : life(sid);
             LIVE.add(sid);
             List<Object> aliases = new ArrayList<>();
             aliases.add(peer);
@@ -159,6 +153,48 @@ public final class CausynthNodes {
         Startup startup = new Startup(RUNNING.get(), MessageDoors.beginNodeStartup(node));
         RUNNING.set(peer);
         return startup;
+    }
+
+    /**
+     * A peer of server {@code sid} is about to be constructed and started
+     * from its configuration (QuorumPeerMain): its next life begins, and the
+     * construction runs as that life's node startup, up to the end of the
+     * peer's run.
+     *
+     * @return what {@link #constructed} ends, or null
+     */
+    public static Object constructing(long sid) {
+        if (!ON) {
+            return null;
+        }
+        Object node;
+        synchronized (CausynthNodes.class) {
+            node = life(sid);
+            CONSTRUCTED.add(sid);
+        }
+        return new Startup(RUNNING.get(), MessageDoors.beginNodeStartup(node));
+    }
+
+    /** The construction {@link #constructing} began is over. */
+    public static void constructed(Object startup) {
+        if (startup != null) {
+            MessageDoors.endNodeStartup(((Startup) startup).token);
+        }
+    }
+
+    /** Server {@code sid}'s node at a new life: its first, or the one after its last. */
+    private static Object life(long sid) {
+        String name = PREFIX + "peer" + sid;
+        Object node = PEERS.get(sid);
+        if (node == null) {
+            node = new Object();
+            PEERS.put(sid, node);
+            EPOCHS.put(node, 0L);
+            MessageDoors.registerNode(node, NODE, PEER, name);
+        } else {
+            MessageDoors.restartSource(node, NODE, PEER, name, EPOCHS.merge(node, 1L, Long::sum));
+        }
+        return node;
     }
 
     /** The start {@link #starting} began is over; a peer that failed to start is down. */
