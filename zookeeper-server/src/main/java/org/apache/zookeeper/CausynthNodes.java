@@ -23,6 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -31,8 +32,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.WeakHashMap;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.ToLongFunction;
 import org.apache.zookeeper.server.ServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
@@ -86,6 +89,8 @@ public final class CausynthNodes {
     private static final Map<Object, Long> EPOCHS = new IdentityHashMap<>();
     /** The server ids whose life began at their construction, before their peer started. */
     private static final Set<Long> CONSTRUCTED = new HashSet<>();
+    /** The peers started in this JVM, held weakly: a peer a test builds and never starts has no node. */
+    private static final Map<QuorumPeer, Boolean> STARTED = new WeakHashMap<>();
     /** Every quorum role server made, held weakly. */
     private static final Map<ZooKeeperServer, Boolean> ROLE_SERVERS = new WeakHashMap<>();
     /** The server ids the test has started and not shut down. */
@@ -106,12 +111,26 @@ public final class CausynthNodes {
     }
 
     /**
-     * How long an idle quorum worker waits for its next message: the given
-     * bound, or, in a workload, until one comes (the recording and a slower
-     * replay would wake it a different number of times).
+     * An idle quorum worker's next message: within {@code ms}, or, in a
+     * workload, whenever it comes, an untimed wait (the recording and a slower
+     * replay would wake a timed one a different number of times, each wake a
+     * turn of its own).
      */
-    public static long idleWait(long ms) {
-        return ON ? NEVER_MS : ms;
+    public static <E> E next(BlockingQueue<E> queue, long ms) throws InterruptedException {
+        return ON ? queue.take() : queue.poll(ms, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * {@code items} in the order a quorum hands them a packet: as the set
+     * keeps them, or, in a workload, by server id (a set of handlers keeps
+     * them by identity hash, another order every run).
+     */
+    public static <T> List<T> bySid(Collection<T> items, ToLongFunction<T> sid) {
+        List<T> ordered = new ArrayList<>(items);
+        if (ON) {
+            ordered.sort(Comparator.comparingLong(sid));
+        }
+        return ordered;
     }
 
     /** The session timeout a client asks for: the caller's, or none. */
@@ -158,6 +177,7 @@ public final class CausynthNodes {
             for (Object alias : aliases) {
                 MessageDoors.registerSourceAlias(alias, node);
             }
+            STARTED.put(peer, Boolean.TRUE);
         }
         int limit = Math.max(1, NEVER_MS / peer.getTickTime());
         peer.setInitLimit(limit);
@@ -229,12 +249,16 @@ public final class CausynthNodes {
 
     /** A role's server, made for {@code peer} in an election, is the peer's. */
     public static void serving(QuorumPeer peer, ZooKeeperServer server) {
-        if (ON) {
+        if (ON && started(peer)) {
             MessageDoors.registerSourceAlias(server, peer);
             synchronized (ROLE_SERVERS) {
                 ROLE_SERVERS.put(server, Boolean.TRUE);
             }
         }
+    }
+
+    private static synchronized boolean started(QuorumPeer peer) {
+        return STARTED.containsKey(peer);
     }
 
     /** The quorum role servers that run now: where a session can be expired. */

@@ -40,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.ZKDatabase;
@@ -139,7 +140,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
     Runnable ping = new Runnable() {
         @Override
         public void run() {
-            for (LearnerHandler lh : activeObservers) {
+            // GraphChecker: in a workload, the observers in server id order.
+            for (LearnerHandler lh : CausynthNodes.bySid(activeObservers, LearnerHandler::getSid)) {
                 lh.ping();
             }
         }
@@ -398,7 +400,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
     }
 
     private synchronized void sendPacket(final QuorumPacket pkt) {
-        for (LearnerHandler lh : activeObservers) {
+        // GraphChecker: in a workload, the observers in server id order.
+        for (LearnerHandler lh : CausynthNodes.bySid(activeObservers, LearnerHandler::getSid)) {
             lh.queuePacket(pkt);
         }
         lastProposedZxid = pkt.getZxid();
@@ -448,8 +451,11 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
         }
         thread = new Thread(this, "ObserverMaster");
         thread.start();
-        pinger = Executors.newSingleThreadScheduledExecutor();
-        pinger.scheduleAtFixedRate(ping, self.tickTime / 2, self.tickTime / 2, TimeUnit.MILLISECONDS);
+        // GraphChecker: in a workload no periodic pings (a learner waits NEVER_MS for a packet).
+        if (!CausynthNodes.automatic()) {
+            pinger = Executors.newSingleThreadScheduledExecutor();
+            pinger.scheduleAtFixedRate(ping, self.tickTime / 2, self.tickTime / 2, TimeUnit.MILLISECONDS);
+        }
     }
 
     public void run() {
