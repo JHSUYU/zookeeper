@@ -109,14 +109,19 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         assertEquals(Code.OK.intValue(), aheadRc.get());
         harness.awaitSync(follower, peers[follower]);
 
-        harness.noteAcksOf("/after");
-        client.create("/after", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        harness.awaitAckFrom(follower);
-        assertEquals(ahead + 1, harness.trackedZxid(), "the follow-up create should be the next transaction");
+        // Two follow-up creates: the replay of F's next life applies both, so the second runs the out-of-order guard.
+        String[] after = {"/after", "/after2"};
+        for (int i = 0; i < after.length; i++) {
+            harness.noteAcksOf(after[i]);
+            client.create(after[i], new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            harness.awaitAckFrom(follower);
+            assertEquals(ahead + 1 + i, harness.trackedZxid(), "each follow-up create should be the next transaction");
+        }
 
         restart(follower, () -> { });
         harness.awaitSync(follower, peers[follower]);
-        assertTrue(has(follower, "/ahead") && has(follower, "/after"), "the restarted follower lost a create");
+        assertTrue(has(follower, "/ahead") && has(follower, "/after") && has(follower, "/after2"),
+            "the restarted follower lost a create");
 
         // The restarted life's construction (runFromConfig, where its replay runs) ends inside the test: it returns
         // when its peer stops, and a recorded window closes before tear-down stops it.
