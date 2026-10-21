@@ -145,6 +145,24 @@ public final class CausynthNodes {
         return ON ? NEVER_MS : tickTime;
     }
 
+    /**
+     * A daemon of a node takes a turn ({@code role}), in a workload: a root
+     * its untimed wait does not open, so what it reads and decides in it
+     * stands at an address of its own.
+     *
+     * @return what {@link #endTurn} ends, or 0
+     */
+    public static long beginTurn(Object owner, String role) {
+        return ON ? MessageDoors.beginTick(owner, role) : 0L;
+    }
+
+    /** The turn {@link #beginTurn} began is over. */
+    public static void endTurn(long turn) {
+        if (turn != 0L) {
+            MessageDoors.endTick(turn);
+        }
+    }
+
     /** The session timeout a client asks for: the caller's, or none. */
     public static int sessionTimeout(int timeout) {
         return ON ? NEVER_MS : timeout;

@@ -160,7 +160,21 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public void run() {
         try {
             while (running) {
-                long waitTime = sessionExpiryQueue.getWaitTime();
+                // GraphChecker: in a workload each look of the expirer is a turn of its own.
+                long causynth = CausynthNodes.beginTurn(this, "SESSION_EXPIRY");
+                long waitTime;
+                try {
+                    waitTime = sessionExpiryQueue.getWaitTime();
+                    if (waitTime <= 0) {
+                        for (SessionImpl s : sessionExpiryQueue.poll()) {
+                            ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                            setSessionClosing(s.sessionId);
+                            expirer.expire(s);
+                        }
+                    }
+                } finally {
+                    CausynthNodes.endTurn(causynth);
+                }
                 if (waitTime > 0) {
                     // GraphChecker: in a workload the expirer looks again when a session is added
                     // or touched (or the tracker shuts down), not when its wait times out.
@@ -169,13 +183,6 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                     } else {
                         Thread.sleep(waitTime);
                     }
-                    continue;
-                }
-
-                for (SessionImpl s : sessionExpiryQueue.poll()) {
-                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
-                    setSessionClosing(s.sessionId);
-                    expirer.expire(s);
                 }
             }
         } catch (InterruptedException e) {
@@ -207,23 +214,31 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         causynthChanged();
     }
 
-    /** GraphChecker: in a workload, the session changes the expirer has to look at, and those it looked at. */
+    /**
+     * GraphChecker: in a workload, the session changes the expirer has to look at, and those it
+     * looked at, under a lock of their own that holds no other.
+     */
+    private final Object causynthChangeLock = new Object();
     private long causynthChanges;
     private long causynthSeen;
 
     /** GraphChecker: a session was added, touched, or the tracker shuts down: the expirer looks again. */
-    private synchronized void causynthChanged() {
+    private void causynthChanged() {
         if (CausynthNodes.automatic()) {
-            causynthChanges++;
-            notifyAll();
+            synchronized (causynthChangeLock) {
+                causynthChanges++;
+                causynthChangeLock.notifyAll();
+            }
         }
     }
 
-    private synchronized void causynthAwaitChange() throws InterruptedException {
-        while (running && causynthSeen == causynthChanges) {
-            wait();
+    private void causynthAwaitChange() throws InterruptedException {
+        synchronized (causynthChangeLock) {
+            while (running && causynthSeen == causynthChanges) {
+                causynthChangeLock.wait();
+            }
+            causynthSeen = causynthChanges;
         }
-        causynthSeen = causynthChanges;
     }
 
     private void logTraceTouchSession(long sessionId, int timeout, String sessionStatus) {
