@@ -123,7 +123,7 @@ public class ReadOnlyZooKeeperServer extends ZooKeeperServer {
         if (((LearnerSessionTracker) sessionTracker).isGlobalSession(sessionId)) {
             String msg = "Refusing global session reconnection in RO mode " + cnxn.getRemoteSocketAddress();
             LOG.info(msg);
-            throw new ServerCnxn.CloseRequestException(msg, ServerCnxn.DisconnectReason.RENEW_GLOBAL_SESSION_IN_RO_MODE);
+            throw new ServerCnxn.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-13") CloseRequestException(msg, ServerCnxn.DisconnectReason.RENEW_GLOBAL_SESSION_IN_RO_MODE);
         }
     }
 

@@ -1519,7 +1519,7 @@ public class Leader extends LearnerMaster {
             }
             if (ss.getCurrentEpoch() != -1) {
                 if (ss.isMoreRecentThan(leaderStateSummary)) {
-                    throw new IOException("Follower is ahead of the leader, leader summary: "
+                    throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-06") IOException("Follower is ahead of the leader, leader summary: "
                                           + leaderStateSummary.getCurrentEpoch()
                                           + " (current epoch), "
                                           + leaderStateSummary.getLastZxid()

@@ -338,7 +338,7 @@ public class ZKDatabase {
                     ZxidUtils.zxidToString(request.zxid),
                     ZxidUtils.zxidToString(maxCommittedLog));
                 LOG.error(msg);
-                throw new IllegalStateException(msg);
+                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-bugs-trunc-sync,zk-bugs-observer-master") IllegalStateException(msg);
             }
             PureRequestProposal p = new PureRequestProposal(request);
             committedLog.add(p);
