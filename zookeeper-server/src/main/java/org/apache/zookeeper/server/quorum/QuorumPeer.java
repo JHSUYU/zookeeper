@@ -53,6 +53,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.security.sasl.SaslException;
 import org.apache.yetus.audience.InterfaceAudience;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException.BadArgumentsException;
 import org.apache.zookeeper.common.AtomicFileOutputStream;
 import org.apache.zookeeper.common.AtomicFileWritingIdiom;
@@ -1191,16 +1192,25 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (!getView().containsKey(myid)) {
             throw new RuntimeException("My id " + myid + " not in the peer list");
         }
-        loadDataBase();
-        startServerCnxnFactory();
+        // GraphChecker: the peer's node, at this life; the start is its own.
+        Object causynth = CausynthNodes.starting(this, zkDb, zkDb.getDataTree(), getTxnFactory(),
+            cnxnFactory, secureCnxnFactory);
+        boolean started = false;
         try {
-            adminServer.start();
-        } catch (AdminServerException e) {
-            LOG.warn("Problem starting AdminServer", e);
+            loadDataBase();
+            startServerCnxnFactory();
+            try {
+                adminServer.start();
+            } catch (AdminServerException e) {
+                LOG.warn("Problem starting AdminServer", e);
+            }
+            startLeaderElection();
+            startJvmPauseMonitor();
+            super.start();
+            started = true;
+        } finally {
+            CausynthNodes.started(causynth, this, started);
         }
-        startLeaderElection();
-        startJvmPauseMonitor();
-        super.start();
     }
 
     private void loadDataBase() {
@@ -1484,6 +1494,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     @Override
     public void run() {
+        // GraphChecker: what the peer's thread starts is the peer's.
+        CausynthNodes.running(this);
         updateThreadName();
 
         LOG.debug("Starting quorum peer");
@@ -1679,6 +1691,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     public void shutdown() {
+        // GraphChecker: the test shut the peer down.
+        CausynthNodes.down(this);
         running = false;
         x509Util.close();
         if (leader != null) {

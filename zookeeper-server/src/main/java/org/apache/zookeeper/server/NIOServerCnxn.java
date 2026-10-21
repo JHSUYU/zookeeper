@@ -36,6 +36,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.Record;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -441,7 +442,13 @@ public class NIOServerCnxn extends ServerCnxn {
         }
         BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(incomingBuffer));
         ConnectRequest request = protocolManager.deserializeConnectRequest(bia);
-        zkServer.processConnectRequest(this, request);
+        // GraphChecker: the server takes the client's connect request.
+        Object causynth = CausynthZk.connected(getRemoteSocketAddress(), zkServer, request);
+        try {
+            zkServer.processConnectRequest(this, request);
+        } finally {
+            CausynthZk.served(causynth);
+        }
         initialized = true;
     }
 

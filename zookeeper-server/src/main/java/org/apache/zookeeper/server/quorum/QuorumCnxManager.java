@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocket;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.common.NetUtils;
 import org.apache.zookeeper.common.X509Exception;
@@ -1271,7 +1272,8 @@ public class QuorumCnxManager {
                     try {
                         BlockingQueue<ByteBuffer> bq = queueSendMap.get(sid);
                         if (bq != null) {
-                            b = pollSendQueue(bq, 1000, TimeUnit.MILLISECONDS);
+                            // GraphChecker: an idle sender wakes only for a message.
+                            b = pollSendQueue(bq, CausynthNodes.idleWait(1000), TimeUnit.MILLISECONDS);
                         } else {
                             LOG.error("No queue of incoming messages for server {}", sid);
                             break;

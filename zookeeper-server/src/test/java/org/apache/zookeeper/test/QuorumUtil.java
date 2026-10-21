@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.server.quorum.Election;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
@@ -155,6 +156,8 @@ public class QuorumUtil {
             assertTrue(ClientBase.waitForServerUp(hp, ClientBase.CONNECTION_TIMEOUT), "waiting for server " + hp + " up");
             LOG.info("{} is accepting client connections", hp);
         }
+        // GraphChecker: the ensemble is up.
+        CausynthNodes.ensembleUp(this);
 
         // This was added to avoid running into the problem of ZOOKEEPER-1539
         if (disableJMXTest) {

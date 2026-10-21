@@ -20,7 +20,6 @@ package org.apache.zookeeper;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -42,6 +41,8 @@ public final class PortAssignment {
     // - Windows modern versions typically use the IANA suggested range
     private static final int GLOBAL_BASE_PORT = 11221;
     private static final int GLOBAL_MAX_PORT = 32767;
+
+    private static final int MAX_PORT = 65535;
 
     private static PortRange portRange = null;
     private static int nextPort;
@@ -71,8 +72,12 @@ public final class PortAssignment {
             nextPort = portRange.getMinimum();
             if (CausynthZk.automatic()) {
                 // GraphChecker: the replays of one case share a host, so each
-                // starts at a port of its own.
-                nextPort += ThreadLocalRandom.current().nextInt(portRange.getMaximum() - nextPort);
+                // starts at the free port the system gives it, and every later
+                // port is above the one before: the ports are in the order the
+                // test asks for them in every run.
+                int first = freePort();
+                portRange = new PortRange(first, MAX_PORT);
+                nextPort = first - 1;
             }
         }
         int candidatePort = nextPort;
@@ -99,6 +104,14 @@ public final class PortAssignment {
                     portRange,
                     e);
             }
+        }
+    }
+
+    private static int freePort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new IllegalStateException("no free port", e);
         }
     }
 

@@ -1113,7 +1113,8 @@ public class ZooKeeper implements AutoCloseable {
     @InterfaceAudience.Private
     public ZooKeeper(ZooKeeperOptions options) throws IOException {
         String connectString = options.getConnectString();
-        int sessionTimeout = options.getSessionTimeoutMs();
+        // GraphChecker: a workload's client asks for a session that never expires.
+        int sessionTimeout = CausynthNodes.sessionTimeout(options.getSessionTimeoutMs());
         long sessionId = options.getSessionId();
         byte[] sessionPasswd = sessionId == 0 ? new byte[16] : options.getSessionPasswd();
         Watcher watcher = options.getDefaultWatcher();
@@ -1158,6 +1159,8 @@ public class ZooKeeper implements AutoCloseable {
             sessionPasswd,
             canBeReadOnly);
         cnxn.seenRwServerBefore = sessionId != 0; // since user has provided sessionId
+        // GraphChecker: a workload's client is a node of its own.
+        CausynthNodes.client(this, cnxn);
         cnxn.start();
     }
 

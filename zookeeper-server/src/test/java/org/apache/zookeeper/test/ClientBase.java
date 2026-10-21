@@ -41,6 +41,7 @@ import java.util.concurrent.TimeoutException;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.net.ssl.SSLContext;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.TestableZooKeeper;
@@ -211,7 +212,7 @@ public abstract class ClientBase extends ZKTestCase {
 
     protected TestableZooKeeper createClient(CountdownWatcher watcher, String hp, int timeout) throws IOException, InterruptedException {
         watcher.reset();
-        TestableZooKeeper zk = new TestableZooKeeper(hp, CausynthZkCluster.sessionTimeout(timeout), watcher);
+        TestableZooKeeper zk = new TestableZooKeeper(hp, timeout, watcher);
         if (!watcher.clientConnected.await(timeout, TimeUnit.MILLISECONDS)) {
             if (exceptionOnFailedConnect) {
                 throw new ProtocolException("Unable to connect to server");
@@ -232,7 +233,7 @@ public abstract class ClientBase extends ZKTestCase {
             }
         }
         if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.registerClient(zk);
+            CausynthNodes.openWindow(zk);
         }
 
         return zk;
@@ -625,9 +626,7 @@ public abstract class ClientBase extends ZKTestCase {
     @AfterEach
     public void tearDown() throws Exception {
         LOG.info("tearDown starting");
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.endTest();
-        }
+        CausynthNodes.endTest();
 
         tearDownAll();
 

@@ -1022,6 +1022,8 @@ public class ClientCnxn {
             isFirstConnect = false;
             long sessId = (seenRwServerBefore) ? sessionId : 0;
             ConnectRequest conReq = new ConnectRequest(0, lastZxid, sessionTimeout, sessId, sessionPasswd, readOnly);
+            // GraphChecker: the connect request leaves as a message.
+            CausynthZk.connecting(ClientCnxn.this, clientCnxnSocket.getLocalSocketAddress(), conReq);
             // We add backwards since we are pushing into the front
             // Only send if there's a pending watch
             if (!clientConfig.getBoolean(ZKClientConfig.DISABLE_AUTO_WATCH_RESET)) {
