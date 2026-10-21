@@ -89,6 +89,8 @@ public final class CausynthNodes {
     private static final Map<Object, Long> EPOCHS = new IdentityHashMap<>();
     /** The server ids whose life began at their construction, before their peer started. */
     private static final Set<Long> CONSTRUCTED = new HashSet<>();
+    /** The peers started in this JVM, held weakly: a peer a test builds and never starts has no node. */
+    private static final Map<QuorumPeer, Boolean> STARTED = new WeakHashMap<>();
     /** Every quorum role server made, held weakly. */
     private static final Map<ZooKeeperServer, Boolean> ROLE_SERVERS = new WeakHashMap<>();
     /** The server ids the test has started and not shut down. */
@@ -175,6 +177,7 @@ public final class CausynthNodes {
             for (Object alias : aliases) {
                 MessageDoors.registerSourceAlias(alias, node);
             }
+            STARTED.put(peer, Boolean.TRUE);
         }
         int limit = Math.max(1, NEVER_MS / peer.getTickTime());
         peer.setInitLimit(limit);
@@ -246,12 +249,16 @@ public final class CausynthNodes {
 
     /** A role's server, made for {@code peer} in an election, is the peer's. */
     public static void serving(QuorumPeer peer, ZooKeeperServer server) {
-        if (ON) {
+        if (ON && started(peer)) {
             MessageDoors.registerSourceAlias(server, peer);
             synchronized (ROLE_SERVERS) {
                 ROLE_SERVERS.put(server, Boolean.TRUE);
             }
         }
+    }
+
+    private static synchronized boolean started(QuorumPeer peer) {
+        return STARTED.containsKey(peer);
     }
 
     /** The quorum role servers that run now: where a session can be expired. */
