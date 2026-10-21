@@ -1701,6 +1701,11 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (follower != null) {
             follower.shutdown();
         }
+        // GraphChecker: in a workload an observer's read waits NEVER_MS and no master pings it
+        // awake, so its shutdown closes its stream, as a follower's does.
+        if (observer != null && CausynthNodes.automatic()) {
+            observer.shutdown();
+        }
         shutdownServerCnxnFactory();
         if (udpSocket != null) {
             udpSocket.close();
