@@ -54,19 +54,11 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
     private final MainThread[] peers = new MainThread[OBSERVER + 1];
     private final int[] clientPorts = new int[OBSERVER + 1];
     private final int[] observerMasterPorts = new int[PARTICIPANTS + 1];
-    private ZooKeeper client;
 
+    /** Before QuorumPeerTestBase#tearDown closes the client and shuts the peers down. */
     @AfterEach
-    public void tearDown() throws Exception {
+    public void releaseHolds() {
         harness.abort();
-        if (client != null) {
-            client.close();
-        }
-        for (int sid = OBSERVER; sid >= 1; sid--) {
-            if (peers[sid] != null) {
-                peers[sid].shutdown();
-            }
-        }
     }
 
     @Test
@@ -85,6 +77,10 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(), config(observerMasterPorts[sid]));
+        }
+        servers = new Servers();
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3]};
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid].start();
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
@@ -96,11 +92,13 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
 
         peers[OBSERVER] = new MainThread(OBSERVER, clientPorts[OBSERVER], PortAssignment.unique(), quorumCfg.toString(),
             config(observerMasterPorts[follower]));
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3], peers[OBSERVER]};
         peers[OBSERVER].start();
         assertTrue(ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[OBSERVER], CONNECTION_TIMEOUT),
             "the observer did not start");
 
-        client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        ZooKeeper client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        servers.zk = new ZooKeeper[] {client};
         client.create("/warm", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         long warm = database(leader).getDataTreeLastProcessedZxid();
         await("the observer did not apply the warm-up create", () -> has(OBSERVER, "/warm"));

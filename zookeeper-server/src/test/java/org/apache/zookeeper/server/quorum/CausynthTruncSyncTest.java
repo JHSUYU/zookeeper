@@ -50,19 +50,11 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
     private final CausynthQuorumHarness harness = new CausynthQuorumHarness();
     private final MainThread[] peers = new MainThread[PARTICIPANTS + 1];
     private final int[] clientPorts = new int[PARTICIPANTS + 1];
-    private ZooKeeper client;
 
+    /** Before QuorumPeerTestBase#tearDown closes the client and shuts the peers down. */
     @AfterEach
-    public void tearDown() throws Exception {
+    public void releaseHolds() {
         harness.abort();
-        if (client != null) {
-            client.close();
-        }
-        for (int sid = PARTICIPANTS; sid >= 1; sid--) {
-            if (peers[sid] != null) {
-                peers[sid].shutdown();
-            }
-        }
     }
 
     @Test
@@ -78,6 +70,10 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(),
                 "snapCount=100000\nadmin.enableServer=false\n");
+        }
+        servers = new Servers();
+        servers.mt = new MainThread[] {peers[1], peers[2], peers[3]};
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
             peers[sid].start();
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
@@ -87,7 +83,8 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         int leader = role(true);
         int follower = role(false);
 
-        client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        ZooKeeper client = ClientBase.createZKClient("127.0.0.1:" + clientPorts[leader]);
+        servers.zk = new ZooKeeper[] {client};
         client.create("/warm", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
 
         harness.holdAcksOf("/ahead");
