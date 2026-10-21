@@ -314,20 +314,20 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         }
 
         if (session.isClosing()) {
-            throw new KeeperException.SessionExpiredException();
+            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-01") SessionExpiredException();
         }
 
         if (session.owner == null) {
             session.owner = owner;
         } else if (session.owner != owner) {
-            throw new KeeperException.SessionMovedException();
+            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-02") SessionMovedException();
         }
     }
 
     public synchronized void setOwner(long id, Object owner) throws SessionExpiredException {
         SessionImpl session = sessionsById.get(id);
         if (session == null || session.isClosing()) {
-            throw new KeeperException.SessionExpiredException();
+            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-03") SessionExpiredException();
         }
         session.owner = owner;
     }

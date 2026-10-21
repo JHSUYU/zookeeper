@@ -519,7 +519,7 @@ public class Learner {
                 // the -1 indicates that this reply should not count as an ack for the new epoch
                 wrappedEpochBytes.putInt(-1);
             } else {
-                throw new IOException("Leaders epoch, "
+                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-07") IOException("Leaders epoch, "
                                       + newEpoch
                                       + " is less than accepted epoch, "
                                       + self.getAcceptedEpoch());

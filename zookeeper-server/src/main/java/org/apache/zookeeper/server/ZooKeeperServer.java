@@ -1513,7 +1513,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                          + " client must try another server";
 
             LOG.info(msg);
-            throw new CloseRequestException(msg, ServerCnxn.DisconnectReason.CLIENT_ZXID_AHEAD);
+            throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-04") CloseRequestException(msg, ServerCnxn.DisconnectReason.CLIENT_ZXID_AHEAD);
         }
         int sessionTimeout = request.getTimeOut();
         byte[] passwd = request.getPasswd();
@@ -2198,7 +2198,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 RATE_LOGGER.rateLimitLog(msg);
                 if (isCountHardLimit) {
                     updateQuotaExceededMetrics(namespace);
-                    throw new KeeperException.QuotaExceededException(lastPrefix);
+                    throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-bugs-retry-seq-quota") QuotaExceededException(lastPrefix);
                 }
             }
         }

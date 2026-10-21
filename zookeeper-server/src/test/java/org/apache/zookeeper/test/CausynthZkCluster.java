@@ -90,4 +90,21 @@ public final class CausynthZkCluster {
         aliases.addAll(CausynthNodes.threadsOf(factory));
         MessageDoors.registerNode(server, NODE, "ZK_SERVER", name, aliases.toArray());
     }
+
+    /**
+     * Work the test runs for a registered server beside the server's own
+     * objects (a ContainerManager it makes): each of {@code parts}, the
+     * threads it keeps and those of its timers belong to the server's node.
+     */
+    public static synchronized void registerServerWork(ZooKeeperServer server, Object... parts) {
+        if (!SERVERS.containsKey(server)) {
+            return;
+        }
+        for (Object part : parts) {
+            MessageDoors.registerSourceAlias(part, server);
+            for (Object thread : CausynthNodes.threadsOf(part)) {
+                MessageDoors.registerSourceAlias(thread, server);
+            }
+        }
+    }
 }

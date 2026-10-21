@@ -28,6 +28,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.server.ServerCnxnFactory;
@@ -266,7 +267,7 @@ public final class CausynthNodes {
         }
     }
 
-    /** The threads {@code holder} keeps, alone or in a collection. */
+    /** The threads {@code holder} keeps, alone, in a collection or as its timers' threads. */
     public static List<Object> threadsOf(Object holder) {
         List<Object> threads = new ArrayList<>();
         for (Class<?> type = holder.getClass(); type != Object.class; type = type.getSuperclass()) {
@@ -274,6 +275,8 @@ public final class CausynthNodes {
                 Object value = read(field, holder);
                 if (value instanceof Thread) {
                     threads.add(value);
+                } else if (value instanceof Timer) {
+                    threads.addAll(threadsOf(value));
                 } else if (value instanceof Collection) {
                     for (Object element : (Collection<?>) value) {
                         if (element instanceof Thread) {
