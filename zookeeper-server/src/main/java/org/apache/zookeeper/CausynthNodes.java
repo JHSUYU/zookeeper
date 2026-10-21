@@ -30,9 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.server.ServerCnxnFactory;
+import org.apache.zookeeper.server.ZooKeeperServer;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
 
 /**
@@ -84,6 +86,8 @@ public final class CausynthNodes {
     private static final Map<Object, Long> EPOCHS = new IdentityHashMap<>();
     /** The server ids whose life began at their construction, before their peer started. */
     private static final Set<Long> CONSTRUCTED = new HashSet<>();
+    /** Every quorum role server made, held weakly. */
+    private static final Map<ZooKeeperServer, Boolean> ROLE_SERVERS = new WeakHashMap<>();
     /** The server ids the test has started and not shut down. */
     private static final Set<Long> LIVE = ConcurrentHashMap.newKeySet();
     /** The peer this thread runs for, carried to every thread it starts. */
@@ -224,10 +228,26 @@ public final class CausynthNodes {
     }
 
     /** A role's server, made for {@code peer} in an election, is the peer's. */
-    public static void serving(QuorumPeer peer, Object server) {
+    public static void serving(QuorumPeer peer, ZooKeeperServer server) {
         if (ON) {
             MessageDoors.registerSourceAlias(server, peer);
+            synchronized (ROLE_SERVERS) {
+                ROLE_SERVERS.put(server, Boolean.TRUE);
+            }
         }
+    }
+
+    /** The quorum role servers that run now: where a session can be expired. */
+    public static List<ZooKeeperServer> roleServers() {
+        List<ZooKeeperServer> running = new ArrayList<>();
+        synchronized (ROLE_SERVERS) {
+            for (ZooKeeperServer server : ROLE_SERVERS.keySet()) {
+                if (server.isRunning()) {
+                    running.add(server);
+                }
+            }
+        }
+        return running;
     }
 
     /** The peer's own thread runs: what it starts is the peer's. */
