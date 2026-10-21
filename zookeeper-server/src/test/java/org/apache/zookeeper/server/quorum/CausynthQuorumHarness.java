@@ -42,9 +42,9 @@ import org.apache.zookeeper.txn.CreateTxn;
  * can hold the ACKs of one create and pause one follower's startForwarding. A hold only makes an order controllable:
  * every proposal, commit, queue and zxid is the normal protocol's, and every override waits before it calls the
  * synchronized super, so no lock is held while waiting. The test waits on what the leader sees, not by polling: a
- * learner's ACK of the tracked create (it logged it) and its ACK of UPTODATE (it synced). Holds and waits are bounded
- * by {@link #WAIT_SECONDS}, far above a native run's seconds: a GraphChecker replay runs many times slower than its
- * recording, and a native hang is still bounded by the test's own timeout.
+ * learner's ACK of the tracked create (it logged it) and its ACK of UPTODATE (it synced, or its life ended first).
+ * Holds and waits are bounded by {@link #WAIT_SECONDS}, far above a native run's seconds: a GraphChecker replay runs
+ * many times slower than its recording, and a native hang is still bounded by the test's own timeout.
  */
 public class CausynthQuorumHarness {
 
@@ -93,11 +93,6 @@ public class CausynthQuorumHarness {
         pauseTaken.set(false);
     }
 
-    /** Before learner {@code sid} starts: {@link #awaitSync} waits for its next sync's ACK of UPTODATE. */
-    void expectSync(long sid) {
-        synced.put(sid, new CountDownLatch(1));
-    }
-
     long trackedZxid() {
         return trackedZxid;
     }
@@ -115,14 +110,13 @@ public class CausynthQuorumHarness {
         assertTrue(ack(sid).await(WAIT_SECONDS, TimeUnit.SECONDS), "server " + sid + " did not log the create");
     }
 
-    /** Learner {@code sid} finished a sync with the leader, unless its server stopped first. */
+    /**
+     * Participant {@code sid}, in its life since its last start, finished a sync with the leader: the leader has its
+     * ACK of UPTODATE. A life whose server stops before (its run ends) ends the wait at once, and fails it.
+     */
     void awaitSync(long sid, MainThread peer) throws InterruptedException {
-        CountDownLatch latch = synced.get(sid);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
-        while (!latch.await(1, TimeUnit.SECONDS)) {
-            assertTrue(peer.isAlive(), "server " + sid + " stopped before it synced");
-            assertTrue(System.nanoTime() < deadline, "server " + sid + " did not sync");
-        }
+        assertTrue(synced.get(sid).await(WAIT_SECONDS, TimeUnit.SECONDS), "server " + sid + " did not sync");
+        assertTrue(peer.isAlive(), "server " + sid + " stopped before it synced");
     }
 
     void awaitForwardingPaused() throws InterruptedException {
@@ -166,8 +160,30 @@ public class CausynthQuorumHarness {
 
     private final class HeldPeer extends MainThread {
 
+        private final long sid;
+        private volatile CountDownLatch life;
+
         HeldPeer(int sid, int clientPort, String quorumCfg, String otherCfg) throws IOException {
             super(sid, clientPort, PortAssignment.unique(), quorumCfg, otherCfg);
+            this.sid = sid;
+        }
+
+        /** Each start is a life whose sync (or end) {@link #awaitSync} waits for. */
+        @Override
+        public synchronized void start() {
+            life = new CountDownLatch(1);
+            synced.put(sid, life);
+            super.start();
+        }
+
+        @Override
+        public void run() {
+            CountDownLatch mine = life;
+            try {
+                super.run();
+            } finally {
+                mine.countDown();
+            }
         }
 
         @Override

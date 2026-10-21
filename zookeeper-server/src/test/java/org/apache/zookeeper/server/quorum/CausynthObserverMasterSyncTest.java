@@ -77,7 +77,8 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             }
         }
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
-            peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(), config(observerMasterPorts[sid]));
+            peers[sid] = harness.participant(sid, clientPorts[sid], quorumCfg.toString(),
+                config(observerMasterPorts[sid]));
         }
         servers = new Servers();
         servers.mt = new MainThread[] {peers[1], peers[2], peers[3]};
@@ -120,11 +121,11 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         long pending = harness.trackedZxid();
         assertEquals(warm + 1, pending, "the held create should be the next transaction");
 
-        harness.expectSync(follower);
         peers[follower].start();
         harness.awaitSync(follower, peers[follower]);
         harness.releaseAcks();
-        assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS), "the held create did not finish");
+        assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+            "the held create did not finish");
         assertEquals(Code.OK.intValue(), pendingRc.get());
 
         peers[OBSERVER].start();
@@ -169,7 +170,8 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         await(leading ? "no leader" : "no follower with an ObserverMaster", () -> {
             for (int sid = 1; sid <= PARTICIPANTS; sid++) {
                 QuorumPeer peer = peers[sid].getQuorumPeer();
-                if (peer != null && (leading ? peer.leader != null : peer.follower != null && peer.follower.om != null)) {
+                if (peer != null
+                    && (leading ? peer.leader != null : peer.follower != null && peer.follower.om != null)) {
                     found.set(sid);
                     return true;
                 }
