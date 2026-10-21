@@ -53,7 +53,10 @@ import org.apache.zookeeper.server.Request;
  * #responded}), binds the record it read ({@link #parsed}) and serves it
  * until the packet is finished ({@link #handled}): the synchronous caller's
  * wake-up and an asynchronous callback's queueing on the event thread come
- * inside it.  A packet a lost connection finished took no reply.  Not wired:
+ * inside it.  The caller then takes the reply where it wakes ({@link
+ * #taken}: a synchronous call's return, an asynchronous callback), so its
+ * next request happens after the server's work.  A packet a lost
+ * connection finished took no reply.  Not wired:
  * watch notifications (a watcher runs on the client's event thread) and a
  * quorum's forwarding between servers.</p>
  */
@@ -145,8 +148,24 @@ public final class CausynthZk {
         if (reply == null) {
             return null;
         }
+        sent.reply = reply;
         return MessageDoors.inbound(reply.trace, reply.symbolic, TRANSPORT, reply.correlationId,
             reply.attemptId, MessageDoors.RESPONSE, sent.cnxn, false);
+    }
+
+    /**
+     * The caller takes the reply to its request where it wakes with it (a
+     * synchronous call's return, an asynchronous callback): a RECV naming the
+     * reply, no anchor left standing, so what the server did before its reply
+     * happens before what the caller does next.  A packet a lost connection
+     * finished took no reply.
+     */
+    static void taken(Sent sent) {
+        MessageDoors.Outbound reply = sent == null ? null : sent.reply;
+        if (reply != null) {
+            MessageDoors.endInbound(MessageDoors.inbound(reply.trace, null, TRANSPORT,
+                reply.correlationId, reply.attemptId, MessageDoors.RESPONSE, sent.cnxn, false));
+        }
     }
 
     /** The reply {@code exchange} serves was read into {@code reply}. */
@@ -177,6 +196,8 @@ public final class CausynthZk {
 
         private final ClientCnxn cnxn;
         private final MessageDoors.Outbound outbound;
+        /** The server's reply, once the send thread read it. */
+        private volatile MessageDoors.Outbound reply;
 
         private Sent(ClientCnxn cnxn, MessageDoors.Outbound outbound) {
             this.cnxn = cnxn;
