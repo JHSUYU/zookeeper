@@ -19,6 +19,7 @@
 package org.apache.zookeeper.test;
 
 import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.graphchecker.runtime.Sessions;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -69,6 +70,12 @@ public final class CausynthZkCluster {
     private static final Map<ZooKeeperServer, String> SERVERS = new IdentityHashMap<>();
     private static final Map<ZooKeeper, String> CLIENTS = new IdentityHashMap<>();
     private static long testRequest;
+
+    static {
+        if (automatic()) {
+            Sessions.expirer(CausynthZkCluster::expire);
+        }
+    }
 
     private CausynthZkCluster() {
     }
@@ -155,6 +162,45 @@ public final class CausynthZkCluster {
             testRequest = 0L;
             MessageDoors.stopRecording();
         }
+    }
+
+    /**
+     * A planted SessionExpired made real ({@code Sessions#expires}), as HBase's
+     * MiniZooKeeperCluster#causynthExpire: the session of the door's client
+     * expired at the registered server that holds it, which deletes its
+     * ephemeral nodes; the client's next operations fail by themselves.  The
+     * server's close is awaited (bounded), so every run sees the same store
+     * after it.  False for an owner that is no ZooKeeper client, or a session
+     * no registered server holds.
+     */
+    static boolean expire(Object owner) {
+        if (!(owner instanceof ZooKeeper)) {
+            return false;
+        }
+        long session = ((ZooKeeper) owner).getSessionId();
+        List<ZooKeeperServer> servers;
+        synchronized (CausynthZkCluster.class) {
+            servers = new ArrayList<>(SERVERS.keySet());
+        }
+        for (ZooKeeperServer server : servers) {
+            Map<Long, Integer> sessions;
+            try {
+                sessions = server.getZKDatabase().getSessionWithTimeOuts();
+            } catch (RuntimeException shutDown) {
+                continue;
+            }
+            if (!sessions.containsKey(session)) {
+                continue;
+            }
+            server.expire(session);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while ((sessions.containsKey(session) || !server.getZKDatabase().getEphemerals(session).isEmpty())
+                && System.nanoTime() < deadline) {
+                Thread.yield();
+            }
+            return true;
+        }
+        return false;
     }
 
     /** The threads {@code holder} keeps, alone or in a collection. */
