@@ -37,6 +37,7 @@ import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.admin.AdminServer.AdminServerException;
 import org.apache.zookeeper.server.auth.ProviderRegistry;
+import org.apache.zookeeper.server.persistence.CausynthSnapshots;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog.DatadirException;
 import org.apache.zookeeper.server.util.JvmPauseMonitor;
@@ -182,7 +183,9 @@ public class QuorumPeerMain {
             }
 
             quorumPeer = getQuorumPeer();
-            quorumPeer.setTxnFactory(new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()));
+            // GraphChecker: the peer's snapshots are its own store.
+            quorumPeer.setTxnFactory(CausynthSnapshots.owned(
+                new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()), config.getServerId()));
             quorumPeer.enableLocalSessions(config.areLocalSessionsEnabled());
             quorumPeer.enableLocalSessionsUpgrading(config.isLocalSessionsUpgradingEnabled());
             //quorumPeer.setQuorumPeers(config.getAllMembers());
