@@ -18,6 +18,10 @@
 
 package org.apache.zookeeper.server;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
@@ -37,6 +41,15 @@ import org.junit.jupiter.api.Test;
  * and is not ephemeral.  The recording lets the cleanup run first: the
  * client's delete finds nothing and its replacement stays.  The manager is
  * the test's own, as CreateContainerTest's, and checks once.</p>
+ *
+ * <p>The manager submits a candidate's deletion through a pool of one
+ * worker on a {@link SynchronousQueue} and waits for it, so its check stays
+ * synchronous as upstream's: GraphChecker can then hold the submission where
+ * it runs, after the candidate scan, while the client's requests pass the
+ * server's pipeline first, which is the race's window (between the scan and
+ * the deletion's PrepRequestProcessor).  Upstream submits on the timer's
+ * thread, behind which no hold can order a request the pipeline already
+ * took.</p>
  */
 public class CausynthContainerReuseTest extends ClientBase {
 
@@ -57,14 +70,7 @@ public class CausynthContainerReuseTest extends ClientBase {
 
         ZooKeeperServer server = serverFactory.getZooKeeperServer();
         ContainerManager cleanup = CausynthZkCluster.serverWork(server, () -> {
-            ContainerManager manager = new ContainerManager(server.getZKDatabase(), server.firstProcessor,
-                CHECK_MS, NO_PACING) {
-                @Override
-                public void checkContainers() throws InterruptedException {
-                    super.checkContainers();
-                    stop();
-                }
-            };
+            ContainerManager manager = new OneCheck(server);
             manager.start();
             return manager;
         });
@@ -79,6 +85,61 @@ public class CausynthContainerReuseTest extends ClientBase {
             zk.getData(PATH, false, null);
         } finally {
             cleanup.stop();
+        }
+    }
+
+    /** The test's manager: it checks once and submits each deletion through its pool. */
+    private static final class OneCheck extends ContainerManager {
+
+        private final ThreadPoolExecutor submitter =
+            new ThreadPoolExecutor(0, 1, 1, TimeUnit.SECONDS, new SynchronousQueue<>());
+
+        OneCheck(ZooKeeperServer server) {
+            super(server.getZKDatabase(), server.firstProcessor, CHECK_MS, NO_PACING);
+        }
+
+        @Override
+        public void checkContainers() throws InterruptedException {
+            super.checkContainers();
+            stop();
+            submitter.shutdown();
+        }
+
+        @Override
+        protected void postDeleteRequest(Request request) throws RequestProcessor.RequestProcessorException {
+            Submission submission = new Submission(request);
+            submitter.execute(submission);
+            try {
+                submission.done.await();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            if (submission.failed != null) {
+                throw submission.failed;
+            }
+        }
+
+        /** One deletion's submission, run by the pool's worker. */
+        private final class Submission implements Runnable {
+
+            private final Request request;
+            private final CountDownLatch done = new CountDownLatch(1);
+            private volatile RequestProcessor.RequestProcessorException failed;
+
+            private Submission(Request request) {
+                this.request = request;
+            }
+
+            @Override
+            public void run() {
+                try {
+                    OneCheck.super.postDeleteRequest(request);
+                } catch (RequestProcessor.RequestProcessorException refused) {
+                    failed = refused;
+                } finally {
+                    done.countDown();
+                }
+            }
         }
     }
 }
