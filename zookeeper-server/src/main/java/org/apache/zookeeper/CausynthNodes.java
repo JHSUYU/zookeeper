@@ -214,6 +214,13 @@ public final class CausynthNodes {
         }
     }
 
+    /** A role's server, made for {@code peer} in an election, is the peer's. */
+    public static void serving(QuorumPeer peer, Object server) {
+        if (ON) {
+            MessageDoors.registerSourceAlias(server, peer);
+        }
+    }
+
     /** The peer's own thread runs: what it starts is the peer's. */
     public static void running(QuorumPeer peer) {
         if (ON) {

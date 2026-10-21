@@ -98,11 +98,14 @@ public final class CausynthZk {
     /**
      * The request's message, served by one stage of {@code owner}'s pipeline
      * until {@link #served}; the {@code last} stage takes it off the wire.
+     * Only the server the client is connected to receives it: in a quorum
+     * the leader gets a forwarded request, and the other peers its txn, on
+     * the learner stream, whose context they serve instead.
      *
      * @return the installed exchange, or null
      */
     public static Object serve(Request request, Object owner, boolean last) {
-        if (!ON) {
+        if (!ON || request.cnxn == null) {
             return null;
         }
         String key = key(request.sessionId, request.cxid);

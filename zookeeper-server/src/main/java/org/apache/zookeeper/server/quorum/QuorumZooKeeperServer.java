@@ -53,8 +53,9 @@ public abstract class QuorumZooKeeperServer extends ZooKeeperServer {
         super(logFactory, tickTime, minSessionTimeout, maxSessionTimeout, listenBacklog, zkDb, self.getInitialConfig(),
               self.isReconfigEnabled());
         this.self = self;
-        // GraphChecker: no session a workload's peer grants expires.
+        // GraphChecker: the role's server is its peer's, and no session it grants expires.
         if (CausynthNodes.automatic()) {
+            CausynthNodes.serving(self, this);
             setMaxSessionTimeout(CausynthNodes.NEVER_MS);
         }
     }
