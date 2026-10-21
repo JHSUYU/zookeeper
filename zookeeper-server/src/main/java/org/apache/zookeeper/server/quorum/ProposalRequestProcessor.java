@@ -86,6 +86,8 @@ public class ProposalRequestProcessor implements RequestProcessor {
                 } catch (XidRolloverException e) {
                     throw new RequestProcessorException(e.getMessage(), e);
                 }
+                // GraphChecker: the leader logs its own proposal as a message to itself.
+                CausynthQuorum.proposing(zks.getLeader().self, request);
                 syncProcessor.processRequest(request);
             }
         }
