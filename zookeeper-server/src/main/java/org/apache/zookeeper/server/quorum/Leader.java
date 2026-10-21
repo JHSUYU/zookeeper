@@ -286,6 +286,21 @@ public class Leader extends LearnerMaster {
         synchronized (learners) {
             learners.add(learner);
         }
+        causynthTick();
+    }
+
+    /** GraphChecker: in a workload, the times the leader's quorum may have changed, and those it ticked for. */
+    private long causynthTicks;
+    private long causynthTicked;
+
+    /** GraphChecker: in a workload the leader's quorum may have changed: it ticks now. */
+    private void causynthTick() {
+        if (CausynthNodes.automatic()) {
+            synchronized (this) {
+                causynthTicks++;
+                notifyAll();
+            }
+        }
     }
 
     /**
@@ -304,6 +319,7 @@ public class Leader extends LearnerMaster {
         synchronized (observingLearners) {
             observingLearners.remove(peer);
         }
+        causynthTick();
     }
 
     boolean isLearnerSynced(LearnerHandler peer) {
@@ -781,7 +797,17 @@ public class Leader extends LearnerMaster {
                     long start = Time.currentElapsedTime();
                     long cur = start;
                     long end = start + self.tickTime / 2;
-                    while (cur < end) {
+                    if (CausynthNodes.automatic()) {
+                        // GraphChecker: in a workload the leader ticks when its quorum may
+                        // change (a learner joins or leaves, a shutdown), each wake a whole
+                        // tick: a slower replay ticks no more often than its recording.
+                        while (causynthTicked == causynthTicks) {
+                            wait();
+                        }
+                        causynthTicked = causynthTicks;
+                        tickSkip = false;
+                    }
+                    while (cur < end && !CausynthNodes.automatic()) {
                         wait(end - cur);
                         cur = Time.currentElapsedTime();
                     }
@@ -871,6 +897,7 @@ public class Leader extends LearnerMaster {
         }
 
         LOG.info("Shutdown called. For the reason {}", reason);
+        causynthTick();
 
         if (cnxAcceptor != null) {
             cnxAcceptor.halt();

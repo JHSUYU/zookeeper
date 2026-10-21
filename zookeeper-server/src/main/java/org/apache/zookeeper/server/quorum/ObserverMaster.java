@@ -451,8 +451,11 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
         }
         thread = new Thread(this, "ObserverMaster");
         thread.start();
-        pinger = Executors.newSingleThreadScheduledExecutor();
-        pinger.scheduleAtFixedRate(ping, self.tickTime / 2, self.tickTime / 2, TimeUnit.MILLISECONDS);
+        // GraphChecker: in a workload no periodic pings (a learner waits NEVER_MS for a packet).
+        if (!CausynthNodes.automatic()) {
+            pinger = Executors.newSingleThreadScheduledExecutor();
+            pinger.scheduleAtFixedRate(ping, self.tickTime / 2, self.tickTime / 2, TimeUnit.MILLISECONDS);
+        }
     }
 
     public void run() {
