@@ -368,7 +368,7 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
                 zxid,
                 pkt.getZxid());
             LOG.error(m);
-            throw new RuntimeException(m);
+            throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-10") RuntimeException(m);
         }
         proposedPkts.remove();
         return pkt;

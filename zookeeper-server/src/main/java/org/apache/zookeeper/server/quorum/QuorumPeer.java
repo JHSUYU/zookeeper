@@ -1233,7 +1233,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     LOG.info("{} found. Setting current epoch to {}.", currentTmp, epochOfTmp);
                     setCurrentEpoch(epochOfTmp);
                 } else {
-                    throw new IOException(
+                    throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-11") IOException(
                         "The current epoch, " + ZxidUtils.zxidToString(currentEpoch)
                             + ", is older than the last zxid, " + lastProcessedZxid);
                 }
@@ -1253,7 +1253,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 writeLongToFile(ACCEPTED_EPOCH_FILENAME, acceptedEpoch);
             }
             if (acceptedEpoch < currentEpoch) {
-                throw new IOException("The accepted epoch, "
+                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-12") IOException("The accepted epoch, "
                                       + ZxidUtils.zxidToString(acceptedEpoch)
                                       + " is less than the current epoch, "
                                       + ZxidUtils.zxidToString(currentEpoch));

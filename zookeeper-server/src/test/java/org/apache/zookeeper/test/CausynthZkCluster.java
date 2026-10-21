@@ -26,6 +26,7 @@ import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
 import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.ZooKeeper;
@@ -108,6 +109,33 @@ public final class CausynthZkCluster {
         aliases.add(factory);
         aliases.addAll(threadsOf(factory));
         MessageDoors.registerNode(server, NODE, "ZK_SERVER", name, aliases.toArray());
+    }
+
+    /**
+     * Work the test runs for a registered server beside the server's own
+     * objects (a ContainerManager it makes): each of {@code parts}, the
+     * threads it keeps and those of its timers belong to the server's node.
+     */
+    public static synchronized void registerServerWork(ZooKeeperServer server, Object... parts) {
+        if (!SERVERS.containsKey(server)) {
+            return;
+        }
+        for (Object part : parts) {
+            List<Object> aliases = new ArrayList<>();
+            aliases.add(part);
+            aliases.addAll(threadsOf(part));
+            for (Class<?> type = part.getClass(); type != Object.class; type = type.getSuperclass()) {
+                for (Field field : type.getDeclaredFields()) {
+                    Object value = read(field, part);
+                    if (value instanceof Timer) {
+                        aliases.addAll(threadsOf(value));
+                    }
+                }
+            }
+            for (Object alias : aliases) {
+                MessageDoors.registerSourceAlias(alias, server);
+            }
+        }
     }
 
     /**
