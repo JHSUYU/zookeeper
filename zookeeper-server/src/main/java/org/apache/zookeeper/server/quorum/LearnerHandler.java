@@ -694,13 +694,7 @@ public class LearnerHandler extends ZooKeeperThread {
                         LOG.debug("Received ACK from Observer {}", this.sid);
                     }
                     syncLimitCheck.updateAck(qp.getZxid());
-                    // GraphChecker: the leader processes its ACKs in a turn of their own.
-                    long causynthTurn = CausynthQuorum.acking(causynthEnd);
-                    try {
-                        learnerMaster.processAck(this.sid, qp.getZxid(), sock.getLocalSocketAddress());
-                    } finally {
-                        CausynthQuorum.acked(causynthTurn);
-                    }
+                    learnerMaster.processAck(this.sid, qp.getZxid(), sock.getLocalSocketAddress());
                     break;
                 case Leader.PING:
                     // Process the touches

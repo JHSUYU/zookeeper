@@ -47,11 +47,9 @@ class AckRequestProcessor implements RequestProcessor {
             // GraphChecker: the leader's own ACK is a message to itself, served around its processing.
             Object logged = CausynthQuorum.servingLogged(self, request);
             Object ack = CausynthQuorum.ackingItself(self, request.zxid);
-            long turn = CausynthQuorum.acking(self);
             try {
                 leader.processAck(self.getMyId(), request.zxid, null);
             } finally {
-                CausynthQuorum.acked(turn);
                 CausynthQuorum.served(ack);
                 CausynthQuorum.served(logged);
             }

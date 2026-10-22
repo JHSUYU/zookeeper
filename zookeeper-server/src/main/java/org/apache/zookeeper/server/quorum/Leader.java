@@ -47,6 +47,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -65,6 +66,7 @@ import org.apache.zookeeper.server.RequestProcessor;
 import org.apache.zookeeper.server.ServerMetrics;
 import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperCriticalThread;
+import org.apache.zookeeper.server.ZooKeeperThread;
 import org.apache.zookeeper.server.ZooTrace;
 import org.apache.zookeeper.server.quorum.QuorumPeer.LearnerType;
 import org.apache.zookeeper.server.quorum.auth.QuorumAuthServer;
@@ -308,6 +310,50 @@ public class Leader extends LearnerMaster {
                 causynthTickLock.notifyAll();
             }
         }
+    }
+
+    /**
+     * GraphChecker: in a workload the leader processes its ACKs -- a learner's, handed over on its handler, and its
+     * own, on its log's thread -- on one thread of its own in the order they were handed over (a queue the schedule
+     * takes in the recording's order), so the ACK that completes a quorum, under which the COMMIT leaves, is the
+     * recorded one.
+     */
+    private final LinkedBlockingQueue<CausynthAck> causynthAcks = new LinkedBlockingQueue<>();
+    private volatile Thread causynthAcker;
+
+    private static final class CausynthAck {
+        private final long sid;
+        private final long zxid;
+        private final SocketAddress from;
+
+        private CausynthAck(long sid, long zxid, SocketAddress from) {
+            this.sid = sid;
+            this.zxid = zxid;
+            this.from = from;
+        }
+    }
+
+    /** GraphChecker: in a workload the leader's ACK thread starts. */
+    private void causynthStartAcker() {
+        if (!CausynthNodes.automatic()) {
+            return;
+        }
+        Thread acker = new ZooKeeperThread("LeaderAcks:" + self.getMyId()) {
+            @Override
+            public void run() {
+                try {
+                    while (true) {
+                        CausynthAck ack = causynthAcks.take();
+                        processAck(ack.sid, ack.zxid, ack.from);
+                    }
+                } catch (InterruptedException stopped) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        acker.setDaemon(true);
+        causynthAcker = acker;
+        acker.start();
     }
 
     /** GraphChecker: in a workload the leader waits, holding none of its locks, for a reason to tick. */
@@ -677,6 +723,7 @@ public class Leader extends LearnerMaster {
         self.end_fle = 0;
 
         zk.registerJMX(new LeaderBean(this, zk), self.jmxLocalPeerBean);
+        causynthStartAcker();
 
         try {
             self.setZabState(QuorumPeer.ZabState.DISCOVERY);
@@ -914,6 +961,10 @@ public class Leader extends LearnerMaster {
 
         LOG.info("Shutdown called. For the reason {}", reason);
         causynthTick();
+        Thread acker = causynthAcker;
+        if (acker != null) {
+            acker.interrupt();
+        }
 
         if (cnxAcceptor != null) {
             cnxAcceptor.halt();
@@ -1100,6 +1151,11 @@ public class Leader extends LearnerMaster {
      */
     @Override
     public synchronized void processAck(long sid, long zxid, SocketAddress followerAddr) {
+        Thread acker = causynthAcker;
+        if (acker != null && Thread.currentThread() != acker) {
+            causynthAcks.add(new CausynthAck(sid, zxid, followerAddr));
+            return;
+        }
         if (!allowedToCommit) {
             return; // last op committed was a leader change - from now on
         }
