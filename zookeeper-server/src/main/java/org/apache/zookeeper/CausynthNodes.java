@@ -38,6 +38,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.ToLongFunction;
 import org.apache.zookeeper.server.ServerCnxnFactory;
 import org.apache.zookeeper.server.ZooKeeperServer;
+import org.apache.zookeeper.server.quorum.Election;
+import org.apache.zookeeper.server.quorum.FastLeaderElection;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
 
 /**
@@ -212,6 +214,7 @@ public final class CausynthNodes {
             }
             STARTED.put(peer, Boolean.TRUE);
         }
+        wakeElections();
         int limit = Math.max(1, NEVER_MS / peer.getTickTime());
         peer.setInitLimit(limit);
         peer.setSyncLimit(limit);
@@ -353,6 +356,31 @@ public final class CausynthNodes {
     public static void down(QuorumPeer peer) {
         if (ON) {
             LIVE.remove(peer.getMyId());
+            wakeElections();
+        }
+    }
+
+    /**
+     * The peer's election, while it looks, sends its notifications again, as the stock code does when its
+     * notification wait times out: a workload's election waits untimed, so its connections and the test's live
+     * peers changing are what wake it.
+     */
+    public static void electionWake(QuorumPeer peer) {
+        if (ON) {
+            Election election = peer.getElectionAlg();
+            if (election instanceof FastLeaderElection) {
+                ((FastLeaderElection) election).causynthWake();
+            }
+        }
+    }
+
+    private static void wakeElections() {
+        List<QuorumPeer> peers;
+        synchronized (CausynthNodes.class) {
+            peers = new ArrayList<>(STARTED.keySet());
+        }
+        for (QuorumPeer peer : peers) {
+            electionWake(peer);
         }
     }
 

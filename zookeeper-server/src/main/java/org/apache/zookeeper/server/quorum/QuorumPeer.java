@@ -1479,13 +1479,27 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     boolean shuttingDownLE = false;
 
+    // GraphChecker: in a workload a suspended peer waits for setSuspended, not on 10 ms sleeps.
+    private final Object causynthSuspendLock = new Object();
+
     public void setSuspended(boolean suspended) {
         this.suspended.set(suspended);
+        synchronized (causynthSuspendLock) {
+            causynthSuspendLock.notifyAll();
+        }
     }
     private void checkSuspended() {
         try {
             while (suspended.get()) {
-                Thread.sleep(10);
+                if (CausynthNodes.automatic()) {
+                    synchronized (causynthSuspendLock) {
+                        if (suspended.get()) {
+                            causynthSuspendLock.wait();
+                        }
+                    }
+                } else {
+                    Thread.sleep(10);
+                }
             }
         } catch (InterruptedException err) {
             Thread.currentThread().interrupt();
