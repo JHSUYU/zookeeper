@@ -32,24 +32,25 @@ import org.junit.jupiter.api.Test;
 
 /**
  * GraphChecker's workload of zk-bugs-container-reuse: a container that lost
- * its last child is cleaned up while a client replaces it with a persistent
- * node at the same path and reads it back.
+ * its last child is a cleanup candidate while a client replaces it with a
+ * persistent node at the same path and reads it back.
  *
  * <p>ContainerManager#checkContainers picks the empty container as a
  * candidate and posts a deleteContainer request that names only its path;
  * PrepRequestProcessor checks only that the node at the path has no children
- * and is not ephemeral.  The recording lets the cleanup run first: the
- * client's delete finds nothing and its replacement stays.  The manager is
- * the test's own, as CreateContainerTest's, and checks once.</p>
+ * and is not an ephemeral, so it deletes whatever node holds the path when
+ * the request gets there.  The manager is the test's own, as
+ * CreateContainerTest's, and checks once.</p>
  *
  * <p>The manager submits a candidate's deletion through a pool of one
  * worker on a {@link SynchronousQueue} and waits for it, so its check stays
- * synchronous as upstream's: GraphChecker can then hold the submission where
- * it runs, after the candidate scan, while the client's requests pass the
- * server's pipeline first, which is the race's window (between the scan and
- * the deletion's PrepRequestProcessor).  Upstream submits on the timer's
- * thread, behind which no hold can order a request the pipeline already
- * took.</p>
+ * synchronous as upstream's and GraphChecker can hold the submission where it
+ * runs.  The worker posts the deletion {@link #POST_DELAY_MS} after the scan:
+ * the window between the scan and the deletion's PrepRequestProcessor, which
+ * upstream leaves to the scheduler, is wide enough that the recording has the
+ * client's delete, create and read inside it, and the cleanup then deletes the
+ * replacement after the client's read.  The bug's world is that deletion
+ * before the read.</p>
  */
 public class CausynthContainerReuseTest extends ClientBase {
 
@@ -58,8 +59,12 @@ public class CausynthContainerReuseTest extends ClientBase {
     private static final int CHECK_MS = 100;
     /** No wait between two candidates' deletions. */
     private static final int NO_PACING = Integer.MAX_VALUE;
-    /** Long enough for the check's cleanup to be done first. */
-    private static final long SETTLE_MS = 2000;
+    /** When the client replaces the container, after the manager starts: after its scan. */
+    private static final long AFTER_SCAN_MS = 1000;
+    /** How long the worker waits after the scan before it posts a deletion. */
+    private static final long POST_DELAY_MS = 3000;
+    /** The bound on the wait for the manager's check to end. */
+    private static final long CHECKED_S = 30;
 
     @Test
     public void keepsTheReplacementOfACleanedContainer() throws Exception {
@@ -69,13 +74,13 @@ public class CausynthContainerReuseTest extends ClientBase {
         zk.delete(PATH + "/child", -1);
 
         ZooKeeperServer server = serverFactory.getZooKeeperServer();
-        ContainerManager cleanup = CausynthZkCluster.serverWork(server, () -> {
-            ContainerManager manager = new OneCheck(server);
+        OneCheck cleanup = CausynthZkCluster.serverWork(server, () -> {
+            OneCheck manager = new OneCheck(server);
             manager.start();
             return manager;
         });
         try {
-            Thread.sleep(SETTLE_MS);
+            Thread.sleep(AFTER_SCAN_MS);
             try {
                 zk.delete(PATH, -1);
             } catch (KeeperException.NoNodeException cleaned) {
@@ -83,6 +88,9 @@ public class CausynthContainerReuseTest extends ClientBase {
             }
             zk.create(PATH, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             zk.getData(PATH, false, null);
+            cleanup.checked.await(CHECKED_S, TimeUnit.SECONDS);
+            // queued behind the cleanup's deletion: its reply means the deletion was applied
+            zk.exists("/", false);
         } finally {
             cleanup.stop();
         }
@@ -93,6 +101,7 @@ public class CausynthContainerReuseTest extends ClientBase {
 
         private final ThreadPoolExecutor submitter =
             new ThreadPoolExecutor(0, 1, 1, TimeUnit.SECONDS, new SynchronousQueue<>());
+        private final CountDownLatch checked = new CountDownLatch(1);
 
         OneCheck(ZooKeeperServer server) {
             super(server.getZKDatabase(), server.firstProcessor, CHECK_MS, NO_PACING);
@@ -100,9 +109,13 @@ public class CausynthContainerReuseTest extends ClientBase {
 
         @Override
         public void checkContainers() throws InterruptedException {
-            super.checkContainers();
-            stop();
-            submitter.shutdown();
+            try {
+                super.checkContainers();
+            } finally {
+                stop();
+                submitter.shutdown();
+                checked.countDown();
+            }
         }
 
         @Override
@@ -133,7 +146,10 @@ public class CausynthContainerReuseTest extends ClientBase {
             @Override
             public void run() {
                 try {
+                    Thread.sleep(POST_DELAY_MS);
                     OneCheck.super.postDeleteRequest(request);
+                } catch (InterruptedException stopped) {
+                    Thread.currentThread().interrupt();
                 } catch (RequestProcessor.RequestProcessorException refused) {
                     failed = refused;
                 } finally {
