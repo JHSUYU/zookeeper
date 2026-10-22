@@ -1131,9 +1131,7 @@ public class ClientCnxn {
             saslLoginFailed = false;
             if (!isFirstConnect) {
                 try {
-                    // GraphChecker: a constant pause in a workload, so the reconnect's timing is no draw
-                    Thread.sleep(CausynthZk.automatic() ? CausynthZk.RECONNECT_PAUSE_MS
-                        : ThreadLocalRandom.current().nextLong(1000));
+                    Thread.sleep(ThreadLocalRandom.current().nextLong(1000));
                 } catch (InterruptedException e) {
                     LOG.warn("Unexpected exception", e);
                 }

@@ -81,8 +81,6 @@ public final class CausynthZk {
     private static final boolean ON = Boolean.getBoolean(AUTOMATIC);
     /** A client's host-order seed in a workload (StaticHostProvider): one order in every run. */
     public static final long HOST_ORDER_SEED = 1L;
-    /** A client's pause before it reconnects in a workload (ClientCnxn#startConnect; stock: random below 1 s). */
-    public static final long RECONNECT_PAUSE_MS = 500L;
     /** A workload's hold on every read-only client's search for a writable server ({@link #holdWritableSeek}). */
     private static volatile boolean writableSeekHeld;
     /** The read-only clients that met the hold, woken when it is released. */
