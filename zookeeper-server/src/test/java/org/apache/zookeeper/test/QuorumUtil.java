@@ -204,6 +204,8 @@ public class QuorumUtil {
                     ClientBase.waitForServerUp("127.0.0.1:" + getPeer(i).clientPort, ClientBase.CONNECTION_TIMEOUT),
                     "Waiting for server up");
         }
+        // GraphChecker: a quorum is up.
+        CausynthNodes.ensembleUp(this);
     }
 
     public void start(int id) throws IOException {

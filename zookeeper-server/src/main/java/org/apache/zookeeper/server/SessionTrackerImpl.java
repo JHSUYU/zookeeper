@@ -112,7 +112,8 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         super("SessionTracker", listener);
         this.expirer = expirer;
         // GraphChecker: in a workload sessions expire by the NEVER_MS interval (CausynthNodes#expiryInterval).
-        this.sessionExpiryQueue = new ExpiryQueue<>(CausynthNodes.expiryInterval(tickTime));
+        // GraphChecker: in a workload the queue counts its buckets from its start (CausynthNodes#expiryInterval).
+        this.sessionExpiryQueue = new ExpiryQueue<>(CausynthNodes.expiryInterval(tickTime), CausynthNodes.automatic());
         this.sessionsWithTimeout = sessionsWithTimeout;
         this.nextSessionId.set(initializeNextSessionId(serverId));
         for (Entry<Long, Integer> e : sessionsWithTimeout.entrySet()) {
@@ -160,13 +161,18 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public void run() {
         try {
             while (running) {
-                // GraphChecker: in a workload each look of the expirer is a turn of its own.
+                // GraphChecker: in a workload each look of the expirer is a turn of its own, and one clock
+                // reading of it decides on the raw time to the next expiration (ExpiryQueue#causynthWaitTime)
+                // and the bucket it polls.
                 long causynth = CausynthNodes.beginTurn(this, "SESSION_EXPIRY");
+                boolean automatic = CausynthNodes.automatic();
                 long waitTime;
                 try {
-                    waitTime = sessionExpiryQueue.getWaitTime();
+                    long now = automatic ? Time.currentElapsedTime() : 0L;
+                    waitTime = automatic
+                        ? sessionExpiryQueue.causynthWaitTime(now) : sessionExpiryQueue.getWaitTime();
                     if (waitTime <= 0) {
-                        for (SessionImpl s : sessionExpiryQueue.poll()) {
+                        for (SessionImpl s : automatic ? sessionExpiryQueue.poll(now) : sessionExpiryQueue.poll()) {
                             ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
                             setSessionClosing(s.sessionId);
                             expirer.expire(s);
