@@ -203,6 +203,8 @@ public class Observer extends Learner {
         case Leader.INFORM:
             ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
             logEntry = SerializeUtils.deserializeTxn(qp.getData());
+            // GraphChecker: the header the INFORM carried.
+            CausynthQuorum.parsedTxn(logEntry.getHeader());
             Request request = logEntry.toRequest();
             request.logLatency(ServerMetrics.getMetrics().COMMIT_PROPAGATION_LATENCY);
             ObserverZooKeeperServer obs = (ObserverZooKeeperServer) zk;

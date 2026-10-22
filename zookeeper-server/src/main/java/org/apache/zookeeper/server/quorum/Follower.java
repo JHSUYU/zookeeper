@@ -163,6 +163,8 @@ public class Follower extends Learner {
             ServerMetrics.getMetrics().LEARNER_PROPOSAL_RECEIVED_COUNT.add(1);
             TxnLogEntry logEntry = SerializeUtils.deserializeTxn(qp.getData());
             TxnHeader hdr = logEntry.getHeader();
+            // GraphChecker: the header the PROPOSAL carried.
+            CausynthQuorum.parsedTxn(hdr);
             Record txn = logEntry.getTxn();
             if (hdr.getZxid() != lastQueued + 1) {
                 LOG.warn(

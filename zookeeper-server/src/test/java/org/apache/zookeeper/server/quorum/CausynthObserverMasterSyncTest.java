@@ -21,7 +21,10 @@ package org.apache.zookeeper.server.quorum;
 import static org.apache.zookeeper.server.quorum.CausynthQuorumHarness.await;
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -145,6 +148,29 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             () -> has(OBSERVER, "/pending") && has(OBSERVER, "/after")
                 && database(OBSERVER).getmaxCommittedLog() == after);
         assertTrue(peers[OBSERVER].getQuorumPeer().getActiveServer().isRunning(), "the observer stopped serving");
+
+        // The observer's life and F's ObserverMaster handler serving it end inside the test: each occurrence returns
+        // only when its peer stops, and a recorded window closes before tear-down stops it.
+        List<Thread> serving = handlersOf(OBSERVER);
+        peers[OBSERVER].shutdown();
+        peers[OBSERVER].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+        for (Thread handler : serving) {
+            handler.join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+            assertFalse(handler.isAlive(), "the ObserverMaster handler of the observer did not end");
+        }
+    }
+
+    /** The learner handlers serving server {@code sid} (here F's ObserverMaster's, the observer's only master). */
+    private static List<Thread> handlersOf(long sid) {
+        Thread[] threads = new Thread[Thread.activeCount() * 2 + 16];
+        int count = Thread.enumerate(threads);
+        List<Thread> handlers = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (threads[i] instanceof LearnerHandler && ((LearnerHandler) threads[i]).getSid() == sid) {
+                handlers.add(threads[i]);
+            }
+        }
+        return handlers;
     }
 
     private static String config(int observerMasterPort) {
