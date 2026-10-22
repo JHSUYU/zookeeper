@@ -161,15 +161,18 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public void run() {
         try {
             while (running) {
-                // GraphChecker: in a workload each look of the expirer is a turn of its own, and it decides on
-                // the raw time to the next expiration (ExpiryQueue#causynthWaitTime).
+                // GraphChecker: in a workload each look of the expirer is a turn of its own, and one clock
+                // reading of it decides on the raw time to the next expiration (ExpiryQueue#causynthWaitTime)
+                // and the bucket it polls.
                 long causynth = CausynthNodes.beginTurn(this, "SESSION_EXPIRY");
+                boolean automatic = CausynthNodes.automatic();
                 long waitTime;
                 try {
-                    waitTime = CausynthNodes.automatic()
-                        ? sessionExpiryQueue.causynthWaitTime() : sessionExpiryQueue.getWaitTime();
+                    long now = automatic ? Time.currentElapsedTime() : 0L;
+                    waitTime = automatic
+                        ? sessionExpiryQueue.causynthWaitTime(now) : sessionExpiryQueue.getWaitTime();
                     if (waitTime <= 0) {
-                        for (SessionImpl s : sessionExpiryQueue.poll()) {
+                        for (SessionImpl s : automatic ? sessionExpiryQueue.poll(now) : sessionExpiryQueue.poll()) {
                             ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
                             setSessionClosing(s.sessionId);
                             expirer.expire(s);

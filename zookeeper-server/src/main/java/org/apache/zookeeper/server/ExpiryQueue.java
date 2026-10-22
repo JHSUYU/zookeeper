@@ -136,11 +136,12 @@ public class ExpiryQueue<E> {
     }
 
     /**
-     * GraphChecker: the time to the next expiration, negative once it has passed: {@link #getWaitTime()} without
-     * its floor at 0, so a caller's {@code <= 0} decides on the clock itself and no branch inside stands before it.
+     * GraphChecker: the time from {@code now} to the next expiration, negative once it has passed:
+     * {@link #getWaitTime()} without its floor at 0, so a caller's {@code <= 0} decides on its clock reading itself
+     * and no branch inside stands before it.
      */
-    public long causynthWaitTime() {
-        return nextExpirationTime.get() - Time.currentElapsedTime();
+    public long causynthWaitTime(long now) {
+        return nextExpirationTime.get() - now;
     }
 
     /**
@@ -152,7 +153,14 @@ public class ExpiryQueue<E> {
      *         ready
      */
     public Set<E> poll() {
-        long now = Time.currentElapsedTime();
+        return poll(Time.currentElapsedTime());
+    }
+
+    /**
+     * GraphChecker: {@link #poll()} at a clock reading the caller made, so one reading decides both whether the
+     * next expiration has passed and the bucket taken.
+     */
+    public Set<E> poll(long now) {
         long expirationTime = nextExpirationTime.get();
         if (now < expirationTime) {
             return Collections.emptySet();
