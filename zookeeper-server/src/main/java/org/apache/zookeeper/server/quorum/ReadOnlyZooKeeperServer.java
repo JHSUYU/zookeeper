@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.server.DataTreeBean;
@@ -59,6 +60,11 @@ public class ReadOnlyZooKeeperServer extends ZooKeeperServer {
             self.getInitialConfig(),
             self.isReconfigEnabled());
         this.self = self;
+        // GraphChecker: the read-only server is its peer's, and no session it grants expires.
+        if (CausynthNodes.automatic()) {
+            CausynthNodes.serving(self, this);
+            setMaxSessionTimeout(CausynthNodes.NEVER_MS);
+        }
     }
 
     @Override
