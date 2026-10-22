@@ -21,7 +21,6 @@ package org.apache.zookeeper.server.quorum;
 import static org.apache.zookeeper.server.quorum.CausynthQuorumHarness.await;
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,6 +132,25 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         assertEquals(Code.OK.intValue(), pendingRc.get());
 
         peers[OBSERVER].start();
+        try {
+            awaitObserverAfterPending(client, leader, follower, pending);
+        } finally {
+            // The observer's life and F's ObserverMaster handler serving it end inside the test, whether the observer
+            // applied both creates or not: each occurrence returns only when its peer stops, and a recorded window
+            // closes before tear-down stops it.
+            List<Thread> serving = handlersOf(OBSERVER);
+            peers[OBSERVER].shutdown();
+            peers[OBSERVER].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+            for (Thread handler : serving) {
+                handler.join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+            }
+        }
+        assertTrue(handlersOf(OBSERVER).isEmpty(), "the ObserverMaster handler of the observer did not end");
+    }
+
+    /** The observer syncs through F's ObserverMaster, then applies the held create and the follow-up one. */
+    private void awaitObserverAfterPending(ZooKeeper client, int leader, int follower, long pending)
+        throws Exception {
         await("the observer did not sync through the follower's ObserverMaster", () -> {
             QuorumPeer peer = peers[OBSERVER].getQuorumPeer();
             Observer o = peer == null ? null : peer.observer;
@@ -148,16 +166,6 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             () -> has(OBSERVER, "/pending") && has(OBSERVER, "/after")
                 && database(OBSERVER).getmaxCommittedLog() == after);
         assertTrue(peers[OBSERVER].getQuorumPeer().getActiveServer().isRunning(), "the observer stopped serving");
-
-        // The observer's life and F's ObserverMaster handler serving it end inside the test: each occurrence returns
-        // only when its peer stops, and a recorded window closes before tear-down stops it.
-        List<Thread> serving = handlersOf(OBSERVER);
-        peers[OBSERVER].shutdown();
-        peers[OBSERVER].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
-        for (Thread handler : serving) {
-            handler.join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
-            assertFalse(handler.isAlive(), "the ObserverMaster handler of the observer did not end");
-        }
     }
 
     /** The learner handlers serving server {@code sid} (here F's ObserverMaster's, the observer's only master). */
