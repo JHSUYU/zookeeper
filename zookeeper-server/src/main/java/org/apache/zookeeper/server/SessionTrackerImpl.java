@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.zookeeper.CausynthNodes;
 import org.apache.zookeeper.KeeperException;
@@ -221,29 +222,22 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     }
 
     /**
-     * GraphChecker: in a workload, the session changes the expirer has to look at, and those it
-     * looked at, under a lock of their own that holds no other.
+     * GraphChecker: in a workload, the session changes the expirer has to look at, one item each, on a queue the
+     * expirer takes: each take starts a turn where the recording started it (a queue item's start is a slot of the
+     * schedule), and no two changes fold into one turn.
      */
-    private final Object causynthChangeLock = new Object();
-    private long causynthChanges;
-    private long causynthSeen;
+    private final LinkedBlockingQueue<Object> causynthChanges = new LinkedBlockingQueue<>();
 
     /** GraphChecker: a session was added, touched, or the tracker shuts down: the expirer looks again. */
     private void causynthChanged() {
         if (CausynthNodes.automatic()) {
-            synchronized (causynthChangeLock) {
-                causynthChanges++;
-                causynthChangeLock.notifyAll();
-            }
+            causynthChanges.add(new Object());
         }
     }
 
     private void causynthAwaitChange() throws InterruptedException {
-        synchronized (causynthChangeLock) {
-            while (running && causynthSeen == causynthChanges) {
-                causynthChangeLock.wait();
-            }
-            causynthSeen = causynthChanges;
+        if (running) {
+            causynthChanges.take();
         }
     }
 

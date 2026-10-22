@@ -530,6 +530,8 @@ public class QuorumCnxManager {
 
             sw.start();
             rw.start();
+            // GraphChecker: a looking election sends again over the new connection.
+            CausynthNodes.electionWake(self);
 
             return true;
 
@@ -677,6 +679,8 @@ public class QuorumCnxManager {
 
             sw.start();
             rw.start();
+            // GraphChecker: a looking election sends again over the new connection.
+            CausynthNodes.electionWake(self);
         }
     }
 
@@ -1217,6 +1221,8 @@ public class QuorumCnxManager {
 
             senderWorkerMap.remove(sid, this);
             threadCnt.decrementAndGet();
+            // GraphChecker: a looking election sends again, so it reconnects to the peer it lost.
+            CausynthNodes.electionWake(self);
             return running;
         }
 

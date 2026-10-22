@@ -205,6 +205,17 @@ public class FastLeaderElection implements Election {
     LinkedBlockingQueue<ToSend> sendqueue;
     LinkedBlockingQueue<Notification> recvqueue;
 
+    // GraphChecker: in a workload a looking peer waits for a notification untimed, and is woken to send its own
+    // again (what the stock timeout does) when its connections or the test's live peers change, or at shutdown.
+    private static final Notification CAUSYNTH_WAKE = new Notification();
+    private volatile boolean causynthLooking;
+
+    public void causynthWake() {
+        if (CausynthNodes.automatic() && (causynthLooking || stop)) {
+            recvqueue.offer(CAUSYNTH_WAKE);
+        }
+    }
+
     /**
      * Multi-threaded implementation of message handler. Messenger
      * implements two sub-classes: WorkReceiver and  WorkSender. The
@@ -677,6 +688,7 @@ public class FastLeaderElection implements Election {
     volatile boolean stop;
     public void shutdown() {
         stop = true;
+        causynthWake();
         proposedLeader = -1;
         proposedZxid = -1;
         leadingVoteSet = null;
@@ -922,6 +934,7 @@ public class FastLeaderElection implements Election {
         }
 
         self.start_fle = Time.currentElapsedTime();
+        causynthLooking = true;
         try {
             /*
              * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
@@ -963,7 +976,11 @@ public class FastLeaderElection implements Election {
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
-                Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
+                Notification n = CausynthNodes.automatic()
+                    ? recvqueue.take() : recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
+                if (n == CAUSYNTH_WAKE) {
+                    n = null;
+                }
 
                 /*
                  * Sends more notifications if haven't received enough.
@@ -1052,7 +1069,13 @@ public class FastLeaderElection implements Election {
                             && CausynthNodes.everyLivePeerVoted(self.getVotingView().keySet(), recvset.keySet())) {
 
                             // Verify if there is any change in the proposed leader
-                            while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
+                            // GraphChecker: in a workload every live peer has voted: only a vote already
+                            // queued may still change the leader, so no wait.
+                            while ((n = CausynthNodes.automatic() ? recvqueue.poll()
+                                : recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
+                                if (n == CAUSYNTH_WAKE) {
+                                    continue;
+                                }
                                 if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
                                     recvqueue.put(n);
                                     break;
@@ -1136,6 +1159,7 @@ public class FastLeaderElection implements Election {
             }
             return null;
         } finally {
+            causynthLooking = false;
             try {
                 if (self.jmxLeaderElectionBean != null) {
                     MBeanRegistry.getInstance().unregister(self.jmxLeaderElectionBean);
