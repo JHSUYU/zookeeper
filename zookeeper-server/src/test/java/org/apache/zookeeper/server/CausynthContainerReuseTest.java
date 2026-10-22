@@ -89,6 +89,8 @@ public class CausynthContainerReuseTest extends ClientBase {
             zk.create(PATH, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             zk.getData(PATH, false, null);
             cleanup.checked.await(CHECKED_S, TimeUnit.SECONDS);
+            // queued behind the cleanup's deletion: its reply means the deletion was applied
+            zk.exists("/", false);
         } finally {
             cleanup.stop();
         }
