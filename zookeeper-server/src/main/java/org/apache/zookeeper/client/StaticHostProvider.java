@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
 import org.apache.yetus.audience.InterfaceAudience;
+import org.apache.zookeeper.CausynthZk;
 
 /**
  * Most simple HostProvider, resolves on every next() call.
@@ -45,6 +46,15 @@ public final class StaticHostProvider implements HostProvider {
     private final HostConnectionManager connectionManager;
 
     /**
+     * The seed of the host order: the clock's, but a constant in a GraphChecker workload
+     * ({@link CausynthZk#automatic}), as StaticHostProviderTest seeds its providers, so every recording and replay
+     * tries the servers in one order.
+     */
+    private long seed() {
+        return CausynthZk.automatic() ? CausynthZk.HOST_ORDER_SEED : System.currentTimeMillis() ^ this.hashCode();
+    }
+
+    /**
      * Constructs a SimpleHostSet.
      *
      * @param serverAddresses
@@ -53,7 +63,7 @@ public final class StaticHostProvider implements HostProvider {
      *             if serverAddresses is empty or resolves to an empty list
      */
     public StaticHostProvider(Collection<InetSocketAddress> serverAddresses) {
-        connectionManager = new HostConnectionManager(serverAddresses, System.currentTimeMillis() ^ this.hashCode(), null);
+        connectionManager = new HostConnectionManager(serverAddresses, seed(), null);
     }
 
     /**
@@ -69,7 +79,7 @@ public final class StaticHostProvider implements HostProvider {
      */
     public StaticHostProvider(Collection<InetSocketAddress> serverAddresses, ZKClientConfig clientConfig) {
         connectionManager = new HostConnectionManager(serverAddresses,
-                                                        System.currentTimeMillis() ^ this.hashCode(),
+                                                        seed(),
                                                         null,
                                                         clientConfig);
     }
@@ -87,7 +97,7 @@ public final class StaticHostProvider implements HostProvider {
      */
     public StaticHostProvider(Collection<InetSocketAddress> serverAddresses, Resolver resolver) {
         this.connectionManager = new HostConnectionManager(serverAddresses,
-                                                    System.currentTimeMillis() ^ this.hashCode(),
+                                                    seed(),
                                                     resolver::getAllByName,
                                                     null);
     }

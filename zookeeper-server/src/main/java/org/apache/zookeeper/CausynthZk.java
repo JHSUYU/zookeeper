@@ -74,6 +74,10 @@ public final class CausynthZk {
     /** The transport of a client's requests, and of their fault doors. */
     public static final String TRANSPORT = "ZOOKEEPER";
     private static final boolean ON = Boolean.getBoolean(AUTOMATIC);
+    /** A client's host-order seed in a workload (StaticHostProvider): one order in every run. */
+    public static final long HOST_ORDER_SEED = 1L;
+    /** A client's pause before it reconnects in a workload (ClientCnxn#startConnect; stock: random below 1 s). */
+    public static final long RECONNECT_PAUSE_MS = 500L;
     private static final String ATTEMPT = "1";
     private static final String CONNECT = "CONNECT";
     private static final AtomicLong REQUESTS = new AtomicLong();
