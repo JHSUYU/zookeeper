@@ -21,7 +21,12 @@ package org.apache.zookeeper;
 import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.jute.Record;
@@ -78,6 +83,10 @@ public final class CausynthZk {
     public static final long HOST_ORDER_SEED = 1L;
     /** A client's pause before it reconnects in a workload (ClientCnxn#startConnect; stock: random below 1 s). */
     public static final long RECONNECT_PAUSE_MS = 500L;
+    /** A workload's hold on every read-only client's search for a writable server ({@link #holdWritableSeek}). */
+    private static volatile boolean writableSeekHeld;
+    /** The read-only clients that met the hold, woken when it is released. */
+    private static final Set<ClientCnxn> HELD_SEEKS = Collections.newSetFromMap(new WeakHashMap<>());
     private static final String ATTEMPT = "1";
     private static final String CONNECT = "CONNECT";
     private static final AtomicLong REQUESTS = new AtomicLong();
@@ -95,6 +104,42 @@ public final class CausynthZk {
     /** Whether this JVM is a GraphChecker workload. */
     public static boolean automatic() {
         return ON;
+    }
+
+    /**
+     * In a workload, read-only clients look for a writable server only once {@link #releaseWritableSeek} is called:
+     * a test holds the search until every server it waits for serves, so the probes follow the host order, not the
+     * clock (each failed probe doubles the next one's delay). Outside a workload, nothing.
+     */
+    public static void holdWritableSeek() {
+        if (ON) {
+            writableSeekHeld = true;
+        }
+    }
+
+    /** The hold is over: each client that met it is woken to look for a writable server at once. */
+    public static void releaseWritableSeek() {
+        writableSeekHeld = false;
+        List<ClientCnxn> held;
+        synchronized (HELD_SEEKS) {
+            held = new ArrayList<>(HELD_SEEKS);
+            HELD_SEEKS.clear();
+        }
+        for (ClientCnxn cnxn : held) {
+            cnxn.sendThread.getClientCnxnSocket().packetAdded();
+        }
+    }
+
+    /** Whether the read-only {@code cnxn} may look for a writable server now (ClientCnxn.SendThread#run). */
+    static boolean seeksWritable(ClientCnxn cnxn) {
+        if (!writableSeekHeld) {
+            return true;
+        }
+        synchronized (HELD_SEEKS) {
+            HELD_SEEKS.add(cnxn);
+        }
+        // a release between the first read and the add woke no one: look again
+        return !writableSeekHeld;
     }
 
     /**

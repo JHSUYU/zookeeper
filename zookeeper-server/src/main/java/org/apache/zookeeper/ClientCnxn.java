@@ -1279,7 +1279,8 @@ public class ClientCnxn {
                     }
 
                     // If we are in read-only mode, seek for read/write server
-                    if (state == States.CONNECTEDREADONLY) {
+                    // (GraphChecker: unless a workload holds the search, CausynthZk#holdWritableSeek)
+                    if (state == States.CONNECTEDREADONLY && CausynthZk.seeksWritable(ClientCnxn.this)) {
                         long now = Time.currentElapsedTime();
                         int idlePingRwServer = (int) (now - lastPingRwServer);
                         if (idlePingRwServer >= pingRwTimeout) {

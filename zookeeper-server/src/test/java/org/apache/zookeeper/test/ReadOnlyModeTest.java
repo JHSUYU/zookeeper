@@ -18,6 +18,7 @@
 
 package org.apache.zookeeper.test;
 
+import static org.apache.zookeeper.client.FourLetterWordMain.send4LetterWord;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -29,6 +30,7 @@ import java.io.LineNumberReader;
 import java.io.StringReader;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import org.apache.zookeeper.CausynthZk;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NotReadOnlyException;
@@ -295,6 +297,9 @@ public class ReadOnlyModeTest extends ZKTestCase {
             ByteArrayOutputStream os = loggerTestTool.getOutputStream();
 
             qu.shutdown(2);
+            // GraphChecker: in a workload the client looks for a writable server only once both new lives serve
+            // (released below), so it probes them in its host order, not on the clock's backoff
+            CausynthZk.holdWritableSeek();
             CountdownWatcher watcher = new CountdownWatcher();
             ZooKeeper zk = new ZooKeeper(qu.getConnString(), CONNECTION_TIMEOUT, watcher, true);
             watcher.waitForConnected(CONNECTION_TIMEOUT);
@@ -309,6 +314,11 @@ public class ReadOnlyModeTest extends ZKTestCase {
             qu.start(2);
             qu.start(3);
             ClientBase.waitForServerUp(qu.getConnString(), 2000);
+            if (CausynthZk.automatic()) {
+                awaitWritable(2);
+                awaitWritable(3);
+                CausynthZk.releaseWritableSeek();
+            }
             watcher.waitForConnected(CONNECTION_TIMEOUT);
             zk.create("/test", "test".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
 
@@ -330,6 +340,23 @@ public class ReadOnlyModeTest extends ZKTestCase {
                 }
             }
             assertTrue(found, "Majority server wasn't found while connected to r/o server");
+        }
+    }
+
+    /** GraphChecker: until server {@code sid} answers the client's own probe ("isro") as writable. */
+    private void awaitWritable(int sid) throws Exception {
+        long deadline = Time.currentElapsedTime() + CONNECTION_TIMEOUT;
+        while (!"rw".equals(probe(sid))) {
+            assertTrue(Time.currentElapsedTime() < deadline, "server " + sid + " did not become writable");
+            Thread.sleep(100);
+        }
+    }
+
+    private String probe(int sid) {
+        try {
+            return send4LetterWord("127.0.0.1", qu.getPeer(sid).clientPort, "isro").trim();
+        } catch (Exception notServing) {
+            return "";
         }
     }
 }
