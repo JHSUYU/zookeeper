@@ -137,12 +137,15 @@ public final class CausynthNodes {
 
     /**
      * The interval a session tracker's expiry runs by: {@code tickTime}, or,
-     * in a workload, {@link #NEVER_MS}, so a session asking for no expiry
-     * stands two intervals after the tracker's next, a skew of the tracker's
-     * clock the engine may choose reaching it within two turns.
+     * in a workload, twice {@link #NEVER_MS}. The tracker's queue then counts
+     * its buckets from its own start ({@link #automatic()} to
+     * {@code ExpiryQueue}), so a session made or touched within its first
+     * {@link #NEVER_MS} stands in the queue's first bucket: one skew of the
+     * tracker's clock the engine may choose, past that bucket, expires it at
+     * the expirer's next turn, and without one nothing expires for 12 h.
      */
     public static int expiryInterval(int tickTime) {
-        return ON ? NEVER_MS : tickTime;
+        return ON ? 2 * NEVER_MS : tickTime;
     }
 
     /**

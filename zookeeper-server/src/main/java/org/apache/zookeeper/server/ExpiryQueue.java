@@ -44,14 +44,23 @@ public class ExpiryQueue<E> {
 
     private final AtomicLong nextExpirationTime = new AtomicLong();
     private final int expirationInterval;
+    // GraphChecker: where the buckets count from: 0 (stock), or, for a queue made to count from its start, its
+    // constructor's clock read, so its first bucket does not hang on where the host's clock stands on the grid.
+    private final long causynthBase;
 
     public ExpiryQueue(int expirationInterval) {
+        this(expirationInterval, false);
+    }
+
+    public ExpiryQueue(int expirationInterval, boolean fromStart) {
         this.expirationInterval = expirationInterval;
-        nextExpirationTime.set(roundToNextInterval(Time.currentElapsedTime()));
+        long now = Time.currentElapsedTime();
+        this.causynthBase = fromStart ? now : 0L;
+        nextExpirationTime.set(roundToNextInterval(now));
     }
 
     private long roundToNextInterval(long time) {
-        return (time / expirationInterval + 1) * expirationInterval;
+        return causynthBase + ((time - causynthBase) / expirationInterval + 1) * expirationInterval;
     }
 
     /**
@@ -124,6 +133,14 @@ public class ExpiryQueue<E> {
         long now = Time.currentElapsedTime();
         long expirationTime = nextExpirationTime.get();
         return now < expirationTime ? (expirationTime - now) : 0L;
+    }
+
+    /**
+     * GraphChecker: the time to the next expiration, negative once it has passed: {@link #getWaitTime()} without
+     * its floor at 0, so a caller's {@code <= 0} decides on the clock itself and no branch inside stands before it.
+     */
+    public long causynthWaitTime() {
+        return nextExpirationTime.get() - Time.currentElapsedTime();
     }
 
     /**
