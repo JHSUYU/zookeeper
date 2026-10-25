@@ -274,6 +274,13 @@ public abstract class ClientBase extends ZKTestCase {
     }
 
     public static boolean waitForServerUp(String hp, long timeout, boolean secure, ZKConfig zkConfig) {
+        // GraphChecker: in a workload the test's wait for a server never times out (CausynthNodes.NEVER_MS), as
+        // the servers' own waits: a replay that records the ensemble's start brings it up under the recorded order,
+        // on CloudLab's cores past the test's 30 s (zk-adhoc-06 and -12), and the replay's own bound ends a run
+        // whose server never comes up.
+        if (CausynthZkCluster.automatic()) {
+            timeout = CausynthNodes.NEVER_MS;
+        }
         long start = Time.currentElapsedTime();
         while (true) {
             try {
