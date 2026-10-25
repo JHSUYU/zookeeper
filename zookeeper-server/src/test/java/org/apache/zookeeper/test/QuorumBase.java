@@ -261,17 +261,21 @@ public class QuorumBase extends ClientBase {
         s4.enableLocalSessionsUpgrading(localSessionsUpgradingEnabled);
         s5.enableLocalSessionsUpgrading(localSessionsUpgradingEnabled);
 
-        LOG.info("start QuorumPeer 1");
-        s1.start();
-        LOG.info("start QuorumPeer 2");
-        s2.start();
-        LOG.info("start QuorumPeer 3");
-        s3.start();
-        LOG.info("start QuorumPeer 4");
-        s4.start();
+        // GraphChecker: the peers start from the highest server id down, so a peer that starts after a quorum
+        // elected its leader never outranks it: in a workload an election ends once every live peer voted, and a
+        // later, higher peer won the votes of the peers still looking and led beside the elected leader, whose
+        // wait for its quorum never times out there (CausynthNodes.NEVER_MS).
         LOG.info("start QuorumPeer 5");
         s5.start();
-        LOG.info("started QuorumPeer 5");
+        LOG.info("start QuorumPeer 4");
+        s4.start();
+        LOG.info("start QuorumPeer 3");
+        s3.start();
+        LOG.info("start QuorumPeer 2");
+        s2.start();
+        LOG.info("start QuorumPeer 1");
+        s1.start();
+        LOG.info("started QuorumPeer 1");
 
         LOG.info("Checking ports {}", hostPort);
         for (String hp : hostPort.split(",")) {
