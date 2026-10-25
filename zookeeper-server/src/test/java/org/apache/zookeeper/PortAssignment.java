@@ -42,8 +42,6 @@ public final class PortAssignment {
     private static final int GLOBAL_BASE_PORT = 11221;
     private static final int GLOBAL_MAX_PORT = 32767;
 
-    private static final int MAX_PORT = 65535;
-
     private static PortRange portRange = null;
     private static int nextPort;
 
@@ -72,11 +70,15 @@ public final class PortAssignment {
             nextPort = portRange.getMinimum();
             if (CausynthZk.automatic()) {
                 // GraphChecker: the replays of one case share a host, so each
-                // starts at the free port the system gives it, and every later
-                // port is above the one before: the ports are in the order the
-                // test asks for them in every run.
-                int first = freePort();
-                portRange = new PortRange(first, MAX_PORT);
+                // starts where the free port the system gives it falls in the
+                // lower half of the range below the ephemeral ports, and every
+                // later port is above the one before: the ports are in the
+                // order the test asks for them in every run, and none is a port
+                // an outgoing connection on the host may take before the test
+                // binds it (zk-adhoc-07, Z10: its election port was taken).
+                int first = GLOBAL_BASE_PORT
+                    + freePort() % ((GLOBAL_MAX_PORT - GLOBAL_BASE_PORT + 1) / 2);
+                portRange = new PortRange(first, GLOBAL_MAX_PORT);
                 nextPort = first - 1;
             }
         }
