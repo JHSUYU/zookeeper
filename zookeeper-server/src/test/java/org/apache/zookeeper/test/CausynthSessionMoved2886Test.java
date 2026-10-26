@@ -19,8 +19,10 @@
 package org.apache.zookeeper.test;
 
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.DummyWatcher;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.Op;
 import org.apache.zookeeper.ZKTestCase;
 import org.apache.zookeeper.ZooDefs.Ids;
@@ -32,22 +34,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Workload for zk-buggy-2886 (ZOOKEEPER-2886, point zk-adhoc-02), the multi-only shape of ZOOKEEPER-710.
- * The old connection issues only multi ops while it owns the session; a second handle on another server
- * then takes the session over (its late REVALIDATE sets the leader's session.owner to the new server's
- * LearnerHandler). The recording keeps every old-connection multi ahead of that REVALIDATE, so each reads
- * session.owner as its own server and succeeds -- no SessionMoved is thrown natively.
+ * Workload for zk-buggy-2886 (ZOOKEEPER-2886, point zk-adhoc-02), the multi-only shape of ZOOKEEPER-710. The
+ * old client connection issues only multi ops on the test thread while it owns the session: a create, then
+ * two setData. A takeover thread, started before them and with no happens-before from them, waits
+ * TAKEOVER_DELAY_MS and then opens a second handle on another server with the same session (its REVALIDATE
+ * sets the leader's session.owner to that server's LearnerHandler). Natively the multis finish long before the
+ * takeover, so each reads session.owner as its own server and no SessionMoved is thrown.
  *
- * GraphChecker's world re-pairs the two old-connection multi setData reads of session.owner to the late
- * REVALIDATE's setOwner: the first throws SessionMoved at SessionTrackerImpl.checkSession, becomes a per-op
- * ErrorResult inside the multi (ZOOKEEPER-2886 put back: the SessionMovedException is never rethrown from a
- * multi, so FinalRequestProcessor's ZOOKEEPER-710 teardown never runs), the connection stays open, and the
- * second multi throws SessionMoved there again. The second throw is the target.
+ * GraphChecker's world orders the takeover's REVALIDATE before an old-connection multi's read of
+ * session.owner (the takeover's delay is the workaround that keeps that order free: container-reuse's
+ * "a delay and no happens-before"). That multi's sub-op throws SessionMoved at SessionTrackerImpl.checkSession;
+ * with ZOOKEEPER-2886 put back it stays a per-op ErrorResult, the connection stays open, and a later multi on
+ * it throws there again. Each old multi catches its KeeperException, which acts only after the throw. The
+ * target is the second setData multi's throw.
  */
 public class CausynthSessionMoved2886Test extends ZKTestCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(CausynthSessionMoved2886Test.class);
     public static final int CONNECTION_TIMEOUT = ClientBase.CONNECTION_TIMEOUT;
+    private static final long TAKEOVER_DELAY_MS = 5000;
 
     private final QuorumBase qb = new QuorumBase();
 
@@ -65,31 +70,47 @@ public class CausynthSessionMoved2886Test extends ZKTestCase {
     public void aMovedMultiOnlyConnectionKeepsThrowing() throws Exception {
         String[] hostPorts = qb.hostPort.split(",");
         int leader = qb.getLeaderIndex();
-        int oldServer = (leader + 1) % hostPorts.length;
-        int newServer = (leader + 2) % hostPorts.length;
+        String oldServer = hostPorts[(leader + 1) % hostPorts.length];
+        String newServer = hostPorts[(leader + 2) % hostPorts.length];
 
-        DisconnectableZooKeeper zk = new DisconnectableZooKeeper(
-            hostPorts[oldServer], CONNECTION_TIMEOUT, DummyWatcher.INSTANCE);
-        zk.multi(Arrays.asList(
-            Op.create("/sm2886", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)));
-        zk.multi(Arrays.asList(
-            Op.setData("/sm2886", new byte[1], -1)));
-        zk.multi(Arrays.asList(
-            Op.setData("/sm2886", new byte[2], -1)));
-        LOG.info("old multi-only connection on {} wrote while it owned the session", hostPorts[oldServer]);
+        ZooKeeper zk = new DisconnectableZooKeeper(oldServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE);
+        zk.multi(Arrays.asList(Op.create("/sm2886", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL)));
+        long sessionId = zk.getSessionId();
+        byte[] passwd = zk.getSessionPasswd();
 
-        zk.dontReconnect();
-        ZooKeeper zknew = new ZooKeeper(
-            hostPorts[newServer], CONNECTION_TIMEOUT, DummyWatcher.INSTANCE,
-            zk.getSessionId(), zk.getSessionPasswd());
-        zknew.multi(Arrays.asList(
-            Op.setData("/sm2886", new byte[3], -1)));
-        LOG.info("session moved to {}", hostPorts[newServer]);
+        AtomicReference<ZooKeeper> moved = new AtomicReference<>();
+        AtomicReference<Throwable> takeoverFailure = new AtomicReference<>();
+        Thread takeover = new Thread(() -> {
+            try {
+                Thread.sleep(TAKEOVER_DELAY_MS);
+                ZooKeeper zknew = new ZooKeeper(newServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE, sessionId, passwd);
+                moved.set(zknew);
+                zknew.multi(Arrays.asList(Op.setData("/sm2886", new byte[3], -1)));
+            } catch (Throwable t) {
+                takeoverFailure.set(t);
+            }
+        }, "session-takeover");
+        takeover.start();
 
-        zknew.close();
+        write(zk, 1);
+        write(zk, 2);
+
+        takeover.join();
+        if (takeoverFailure.get() != null) {
+            throw new AssertionError("the takeover failed", takeoverFailure.get());
+        }
+        moved.get().close();
         try {
             zk.close();
         } catch (Exception ignore) {
+        }
+    }
+
+    private static void write(ZooKeeper zk, int n) throws InterruptedException {
+        try {
+            zk.multi(Arrays.asList(Op.setData("/sm2886", new byte[n], -1)));
+        } catch (KeeperException e) {
+            LOG.info("old-connection multi {} failed: {}", n, e.code());
         }
     }
 
