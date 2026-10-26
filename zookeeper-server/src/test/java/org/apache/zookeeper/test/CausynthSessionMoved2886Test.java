@@ -47,6 +47,9 @@ import org.slf4j.LoggerFactory;
  * with ZOOKEEPER-2886 put back it stays a per-op ErrorResult, the connection stays open, and a later multi on
  * it throws there again. Each old multi catches its KeeperException, which acts only after the throw. The
  * target is the second setData multi's throw.
+ *
+ * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
+ * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
 public class CausynthSessionMoved2886Test extends ZKTestCase {
 
@@ -78,13 +81,11 @@ public class CausynthSessionMoved2886Test extends ZKTestCase {
         long sessionId = zk.getSessionId();
         byte[] passwd = zk.getSessionPasswd();
 
-        AtomicReference<ZooKeeper> moved = new AtomicReference<>();
         AtomicReference<Throwable> takeoverFailure = new AtomicReference<>();
         Thread takeover = new Thread(() -> {
             try {
                 Thread.sleep(TAKEOVER_DELAY_MS);
                 ZooKeeper zknew = new ZooKeeper(newServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE, sessionId, passwd);
-                moved.set(zknew);
                 zknew.multi(Arrays.asList(Op.setData("/sm2886", new byte[3], -1)));
             } catch (Throwable t) {
                 takeoverFailure.set(t);
@@ -98,11 +99,6 @@ public class CausynthSessionMoved2886Test extends ZKTestCase {
         takeover.join();
         if (takeoverFailure.get() != null) {
             throw new AssertionError("the takeover failed", takeoverFailure.get());
-        }
-        moved.get().close();
-        try {
-            zk.close();
-        } catch (Exception ignore) {
         }
     }
 
