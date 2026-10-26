@@ -45,6 +45,10 @@ import org.slf4j.LoggerFactory;
  * ZOOKEEPER-710 put back the connection stays open, so a later write on it throws there again. Each old
  * write catches its KeeperException, which acts only after the throw. The target is the second write's throw.
  *
+ * The second write, the target, runs on a thread of its own started after the first returns: its client
+ * request is then rooted at that thread's start, a point a confirmation replay can hold until the takeover's
+ * REVALIDATE has run (on the test thread every request shares the client's API root, which started with the handle).
+ *
  * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
  * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
@@ -91,7 +95,9 @@ public class CausynthSessionMoved710Test extends ZKTestCase {
         takeover.start();
 
         write(zk, 1);
-        write(zk, 2);
+        Thread second = new Thread(() -> write(zk, 2), "old-connection-second-write");
+        second.start();
+        second.join();
 
         takeover.join();
         if (takeoverFailure.get() != null) {
@@ -99,11 +105,13 @@ public class CausynthSessionMoved710Test extends ZKTestCase {
         }
     }
 
-    private static void write(ZooKeeper zk, int n) throws InterruptedException {
+    private static void write(ZooKeeper zk, int n) {
         try {
             zk.setData("/sm710", new byte[n], -1);
         } catch (KeeperException e) {
             LOG.info("old-connection write {} failed: {}", n, e.code());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
