@@ -364,7 +364,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         if (session.owner == null) {
             session.owner = owner;
         } else if (session.owner != owner) {
-            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-02") SessionMovedException();
+            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-02,zk-buggy-710") SessionMovedException();
         }
     }
 
