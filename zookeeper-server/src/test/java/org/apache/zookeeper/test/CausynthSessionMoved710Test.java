@@ -18,8 +18,10 @@
 
 package org.apache.zookeeper.test;
 
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.DummyWatcher;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZKTestCase;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
@@ -30,23 +32,24 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Workload for zk-buggy-710 (ZOOKEEPER-710, point zk-adhoc-02). The old client connection owns the
- * session and writes while it owns it; then a second handle on another server takes the session over
- * (its late REVALIDATE sets the leader's session.owner to the new server's LearnerHandler). The
- * recording keeps every old-connection write ahead of that REVALIDATE, so each reads session.owner as
- * its own server and succeeds -- no SessionMoved is thrown natively.
+ * Workload for zk-buggy-710 (ZOOKEEPER-710, point zk-adhoc-02). The old client connection creates an
+ * ephemeral node and writes it twice on the test thread while it owns the session. A takeover thread,
+ * started before the writes and with no happens-before from them, waits TAKEOVER_DELAY_MS and then opens a
+ * second handle on another server with the same session (its REVALIDATE sets the leader's session.owner to
+ * that server's LearnerHandler). Natively the writes finish long before the takeover, so each reads
+ * session.owner as its own server and no SessionMoved is thrown.
  *
- * GraphChecker's world re-pairs the two old-connection setData reads of session.owner to the late
- * REVALIDATE's setOwner: the first throws SessionMoved at SessionTrackerImpl.checkSession and, because
- * ZOOKEEPER-710 is put back (FinalRequestProcessor does not tear the connection down), the connection
- * stays open and the second setData throws SessionMoved there again -- the permanent SESSIONMOVED. The
- * second throw is the target; on the fixed tree the first throw closes the connection so the second
- * request never reaches checkSession.
+ * GraphChecker's world orders the takeover's REVALIDATE before an old-connection write's read of
+ * session.owner (the takeover's delay is the workaround that keeps that order free: container-reuse's
+ * "a delay and no happens-before"). That write throws SessionMoved at SessionTrackerImpl.checkSession; with
+ * ZOOKEEPER-710 put back the connection stays open, so a later write on it throws there again. Each old
+ * write catches its KeeperException, which acts only after the throw. The target is the second write's throw.
  */
 public class CausynthSessionMoved710Test extends ZKTestCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(CausynthSessionMoved710Test.class);
     public static final int CONNECTION_TIMEOUT = ClientBase.CONNECTION_TIMEOUT;
+    private static final long TAKEOVER_DELAY_MS = 5000;
 
     private final QuorumBase qb = new QuorumBase();
 
@@ -64,27 +67,47 @@ public class CausynthSessionMoved710Test extends ZKTestCase {
     public void aMovedConnectionKeepsThrowing() throws Exception {
         String[] hostPorts = qb.hostPort.split(",");
         int leader = qb.getLeaderIndex();
-        int oldServer = (leader + 1) % hostPorts.length;
-        int newServer = (leader + 2) % hostPorts.length;
+        String oldServer = hostPorts[(leader + 1) % hostPorts.length];
+        String newServer = hostPorts[(leader + 2) % hostPorts.length];
 
-        DisconnectableZooKeeper zk = new DisconnectableZooKeeper(
-            hostPorts[oldServer], CONNECTION_TIMEOUT, DummyWatcher.INSTANCE);
+        ZooKeeper zk = new DisconnectableZooKeeper(oldServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE);
         zk.create("/sm710", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
-        zk.setData("/sm710", new byte[1], -1);
-        zk.setData("/sm710", new byte[2], -1);
-        LOG.info("old connection on {} wrote while it owned the session", hostPorts[oldServer]);
+        long sessionId = zk.getSessionId();
+        byte[] passwd = zk.getSessionPasswd();
 
-        zk.dontReconnect();
-        ZooKeeper zknew = new ZooKeeper(
-            hostPorts[newServer], CONNECTION_TIMEOUT, DummyWatcher.INSTANCE,
-            zk.getSessionId(), zk.getSessionPasswd());
-        zknew.setData("/sm710", new byte[3], -1);
-        LOG.info("session moved to {}", hostPorts[newServer]);
+        AtomicReference<ZooKeeper> moved = new AtomicReference<>();
+        AtomicReference<Throwable> takeoverFailure = new AtomicReference<>();
+        Thread takeover = new Thread(() -> {
+            try {
+                Thread.sleep(TAKEOVER_DELAY_MS);
+                ZooKeeper zknew = new ZooKeeper(newServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE, sessionId, passwd);
+                moved.set(zknew);
+                zknew.setData("/sm710", new byte[3], -1);
+            } catch (Throwable t) {
+                takeoverFailure.set(t);
+            }
+        }, "session-takeover");
+        takeover.start();
 
-        zknew.close();
+        write(zk, 1);
+        write(zk, 2);
+
+        takeover.join();
+        if (takeoverFailure.get() != null) {
+            throw new AssertionError("the takeover failed", takeoverFailure.get());
+        }
+        moved.get().close();
         try {
             zk.close();
         } catch (Exception ignore) {
+        }
+    }
+
+    private static void write(ZooKeeper zk, int n) throws InterruptedException {
+        try {
+            zk.setData("/sm710", new byte[n], -1);
+        } catch (KeeperException e) {
+            LOG.info("old-connection write {} failed: {}", n, e.code());
         }
     }
 
