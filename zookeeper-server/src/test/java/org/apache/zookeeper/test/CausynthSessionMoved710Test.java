@@ -44,6 +44,9 @@ import org.slf4j.LoggerFactory;
  * "a delay and no happens-before"). That write throws SessionMoved at SessionTrackerImpl.checkSession; with
  * ZOOKEEPER-710 put back the connection stays open, so a later write on it throws there again. Each old
  * write catches its KeeperException, which acts only after the throw. The target is the second write's throw.
+ *
+ * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
+ * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
 public class CausynthSessionMoved710Test extends ZKTestCase {
 
@@ -75,13 +78,11 @@ public class CausynthSessionMoved710Test extends ZKTestCase {
         long sessionId = zk.getSessionId();
         byte[] passwd = zk.getSessionPasswd();
 
-        AtomicReference<ZooKeeper> moved = new AtomicReference<>();
         AtomicReference<Throwable> takeoverFailure = new AtomicReference<>();
         Thread takeover = new Thread(() -> {
             try {
                 Thread.sleep(TAKEOVER_DELAY_MS);
                 ZooKeeper zknew = new ZooKeeper(newServer, CONNECTION_TIMEOUT, DummyWatcher.INSTANCE, sessionId, passwd);
-                moved.set(zknew);
                 zknew.setData("/sm710", new byte[3], -1);
             } catch (Throwable t) {
                 takeoverFailure.set(t);
@@ -95,11 +96,6 @@ public class CausynthSessionMoved710Test extends ZKTestCase {
         takeover.join();
         if (takeoverFailure.get() != null) {
             throw new AssertionError("the takeover failed", takeoverFailure.get());
-        }
-        moved.get().close();
-        try {
-            zk.close();
-        } catch (Exception ignore) {
         }
     }
 
