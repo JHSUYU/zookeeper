@@ -48,6 +48,10 @@ import org.slf4j.LoggerFactory;
  * it throws there again. Each old multi catches its KeeperException, which acts only after the throw. The
  * target is the second setData multi's throw.
  *
+ * The second setData multi, the target, runs on a thread of its own started after the first returns: its client
+ * request is then rooted at that thread's start, a point a confirmation replay can hold until the takeover's
+ * REVALIDATE has run (on the test thread every request shares the client's API root, which started with the handle).
+ *
  * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
  * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
@@ -94,7 +98,9 @@ public class CausynthSessionMoved2886Test extends ZKTestCase {
         takeover.start();
 
         write(zk, 1);
-        write(zk, 2);
+        Thread second = new Thread(() -> write(zk, 2), "old-connection-second-multi");
+        second.start();
+        second.join();
 
         takeover.join();
         if (takeoverFailure.get() != null) {
@@ -102,11 +108,13 @@ public class CausynthSessionMoved2886Test extends ZKTestCase {
         }
     }
 
-    private static void write(ZooKeeper zk, int n) throws InterruptedException {
+    private static void write(ZooKeeper zk, int n) {
         try {
             zk.multi(Arrays.asList(Op.setData("/sm2886", new byte[n], -1)));
         } catch (KeeperException e) {
             LOG.info("old-connection multi {} failed: {}", n, e.code());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
