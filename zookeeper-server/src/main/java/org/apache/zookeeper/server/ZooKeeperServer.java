@@ -2198,7 +2198,7 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                 RATE_LOGGER.rateLimitLog(msg);
                 if (isCountHardLimit) {
                     updateQuotaExceededMetrics(namespace);
-                    throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-bugs-retry-seq-quota") QuotaExceededException(lastPrefix);
+                    throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-bugs-retry-seq-quota,zk-inj-02,zk-inj-02-control") QuotaExceededException(lastPrefix);
                 }
             }
         }
