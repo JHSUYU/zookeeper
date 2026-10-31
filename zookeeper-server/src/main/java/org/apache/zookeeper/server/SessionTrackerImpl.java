@@ -358,7 +358,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         }
 
         if (session.isClosing()) {
-            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-01") SessionExpiredException();
+            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-01,zk-inj-04,zk-inj-04-control") SessionExpiredException();
         }
 
         if (session.owner == null) {
