@@ -184,20 +184,9 @@ public class WriteLock extends ProtocolSupport {
          */
         private void findPrefixInChildren(String prefix, ZooKeeper zookeeper, String dir)
             throws KeeperException, InterruptedException {
-            List<String> names = zookeeper.getChildren(dir, false);
-            for (String name : names) {
-                if (name.startsWith(prefix)) {
-                    id = name;
-                    LOG.debug("Found id created last time: {}", id);
-                    break;
-                }
-            }
-            if (id == null) {
-                id = zookeeper.create(dir + "/" + prefix, data, getAcl(), EPHEMERAL_SEQUENTIAL);
-
-                LOG.debug("Created id: {}", id);
-            }
-
+            // the name carries our session id: a node we create is always ours, no need to list
+            id = zookeeper.create(dir + "/" + prefix, data, getAcl(), EPHEMERAL_SEQUENTIAL);
+            LOG.debug("Created id: {}", id);
         }
 
         /**
