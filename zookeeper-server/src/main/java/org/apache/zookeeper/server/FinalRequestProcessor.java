@@ -691,7 +691,7 @@ public class FinalRequestProcessor implements RequestProcessor {
             // does not find -- a quota's stat after a failed initialization
             // (zk-bugs-quota-init), an election offer deleted after it was
             // listed (zk-bugs-election-offer).
-            throw new @CausynthExceptionTarget("zk-bugs-quota-init,zk-bugs-election-offer,zk-bugs-container-reuse") NoNodeException();
+            throw new @CausynthExceptionTarget("zk-bugs-quota-init,zk-bugs-election-offer,zk-bugs-container-reuse,zk-inj-05") NoNodeException();
         }
         zks.checkACL(cnxn, zks.getZKDatabase().aclForNode(n), ZooDefs.Perms.READ, authInfo, path, null);
         Stat stat = new Stat();
