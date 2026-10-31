@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.function.Function;
 import javax.management.JMException;
 import org.apache.zookeeper.KeeperException.SessionExpiredException;
+import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.metrics.MetricsContext;
 import org.apache.zookeeper.server.ContainerManager;
@@ -203,6 +204,10 @@ public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
          * This is done so that requests from learners won't go through
          * LeaderRequestProcessor which perform local session upgrade.
          */
+        if (request.type == ZooDefs.OpCode.closeSession) {
+            // the client is leaving: refuse whatever of the session is still queued
+            sessionTracker.setSessionClosing(request.sessionId);
+        }
         prepRequestProcessor.processRequest(request);
     }
 
