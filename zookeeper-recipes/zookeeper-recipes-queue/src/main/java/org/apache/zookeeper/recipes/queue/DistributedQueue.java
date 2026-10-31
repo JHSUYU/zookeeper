@@ -231,7 +231,8 @@ public class DistributedQueue {
         while (true) {
             LatchChildWatcher childWatcher = new LatchChildWatcher();
             try {
-                orderedChildren = orderedChildren(childWatcher);
+                // one watch per take() leaks watches on a busy queue
+                orderedChildren = orderedChildren(null);
             } catch (KeeperException.NoNodeException e) {
                 zookeeper.create(dir, new byte[0], acl, CreateMode.PERSISTENT);
                 continue;
