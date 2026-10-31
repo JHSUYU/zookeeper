@@ -329,9 +329,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
             String path = txn.getPath();
             String parentPath = getParentPathAndValidate(path);
             ChangeRecord nodeRecord = getRecordForPath(path);
-            if (nodeRecord.childCount > 0) {
-                throw new KeeperException.NotEmptyException(path);
-            }
+            // ContainerManager#getCandidates posts only containers it found empty
             if (EphemeralType.get(nodeRecord.stat.getEphemeralOwner()) == EphemeralType.NORMAL) {
                 throw new KeeperException.BadVersionException(path);
             }
