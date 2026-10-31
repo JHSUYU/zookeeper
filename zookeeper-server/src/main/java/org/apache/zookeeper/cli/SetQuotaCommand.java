@@ -240,8 +240,14 @@ public class SetQuotaCommand extends CliCommand {
             stats.setCount(0);
             stats.setBytes(0L);
 
-            zk.create(statPath, stats.getStatsBytes(),
-                    ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            try {
+                zk.create(statPath, stats.getStatsBytes(),
+                        ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            } catch (KeeperException e) {
+                // no limit without its stat: undo the half-made quota, the caller may retry
+                zk.delete(quotaPath, -1);
+                throw e;
+            }
 
             data = zk.getData(quotaPath, false, new Stat());
             StatsTrack quotaStrack = new StatsTrack(data);
