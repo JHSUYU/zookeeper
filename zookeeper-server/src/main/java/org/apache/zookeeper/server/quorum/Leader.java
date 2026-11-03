@@ -1888,6 +1888,11 @@ public class Leader extends LearnerMaster {
         return (self == null) ? null : self.authServer;
     }
 
+    // The learner (sid) each session was first revalidated through. A REVALIDATE that another learner sends
+    // for such a session is taken for a straggler from a client that has since moved on (ZOOKEEPER-710), and
+    // does not take the session over.
+    private final ConcurrentMap<Long, Long> revalidatedThrough = new ConcurrentHashMap<>();
+
     @Override
     public void revalidateSession(QuorumPacket qp, LearnerHandler learnerHandler) throws IOException {
         ByteArrayInputStream bis = new ByteArrayInputStream(qp.getData());
@@ -1899,14 +1904,20 @@ public class Leader extends LearnerMaster {
         dos.writeLong(id);
         boolean valid = zk.checkIfValidGlobalSession(id, to);
         if (valid) {
-            try {
-                // set the session owner as the follower that owns the session
-                zk.setOwner(id, learnerHandler);
-            } catch (KeeperException.SessionExpiredException e) {
-                LOG.error(
-                    "Somehow session 0x{} expired right after being renewed! (impossible)",
-                    Long.toHexString(id),
-                    e);
+            Long first = revalidatedThrough.putIfAbsent(id, learnerHandler.getSid());
+            if (first == null || first == learnerHandler.getSid()) {
+                try {
+                    // set the session owner as the follower that owns the session
+                    zk.setOwner(id, learnerHandler);
+                } catch (KeeperException.SessionExpiredException e) {
+                    LOG.error(
+                        "Somehow session 0x{} expired right after being renewed! (impossible)",
+                        Long.toHexString(id),
+                        e);
+                }
+            } else {
+                LOG.info("Session 0x{} stays with learner {}: a straggling REVALIDATE through learner {}",
+                    Long.toHexString(id), first, learnerHandler.getSid());
             }
         }
         if (LOG.isTraceEnabled()) {
