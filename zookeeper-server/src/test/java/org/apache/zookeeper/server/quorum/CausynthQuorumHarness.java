@@ -133,6 +133,11 @@ public class CausynthQuorumHarness {
         assertTrue(peer.isAlive(), "server " + sid + " stopped before it synced");
     }
 
+    /** Participant {@code sid} is about to sync again in the life it is in: {@link #awaitSync} waits for that sync. */
+    void expectSync(long sid) {
+        synced.put(sid, new CountDownLatch(1));
+    }
+
     void awaitForwardingPaused() throws InterruptedException {
         assertTrue(forwardingPaused.await(WAIT_SECONDS, TimeUnit.SECONDS), "startForwarding was not reached");
     }

@@ -22,6 +22,7 @@ import static org.apache.zookeeper.server.quorum.CausynthQuorumHarness.await;
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -40,8 +41,11 @@ import org.junit.jupiter.api.Timeout;
  * GraphChecker workload of ZOOKEEPER-5094 (apache/zookeeper PR 2459). A follower F logs a create that its leader has
  * not committed, restarts, and is told to TRUNC; the create commits while F's sync is between TRUNC and NEWLEADER, so
  * the leader sends it as PROPOSAL+COMMIT before NEWLEADER and F applies it in memory only. NEWLEADER's snapshot covers
- * it, and F's next restart replays snapshot plus log. Natively everything passes; a sync that ends before NEWLEADER
- * leaves F's database ahead of its log, and that restart throws at ZKDatabase.addCommittedProposal.
+ * it. Then, in the same life, F logs a second create its leader has not committed and loses its leader: the leader
+ * tells it to TRUNC again, and F's truncateLog reloads its database from its snapshot and log. Natively everything
+ * passes; a first sync that ends before NEWLEADER leaves F's database ahead of its log (no snapshot, and F re-syncs
+ * with the zxid its memory holds), and the second TRUNC's reload throws at ZKDatabase.addCommittedProposal: F never
+ * follows again.
  */
 public class CausynthTruncSyncTest extends QuorumPeerTestBase {
 
@@ -59,7 +63,7 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
 
     @Test
     @Timeout(value = 120)
-    public void aTruncSyncedFollowerRestarts() throws Exception {
+    public void aTruncSyncedFollowerIsTruncatedAgain() throws Exception {
         ClientBase.setupTestEnv();
         StringBuilder quorumCfg = new StringBuilder();
         for (int sid = 1; sid <= PARTICIPANTS; sid++) {
@@ -109,7 +113,7 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         assertEquals(Code.OK.intValue(), aheadRc.get());
         harness.awaitSync(follower, peers[follower]);
 
-        // Two follow-up creates: the replay of F's next life applies both, so the second runs the out-of-order guard.
+        // Two follow-up creates: the reload of F's second TRUNC applies both, so the second runs the out-of-order guard.
         String[] after = {"/after", "/after2"};
         for (int i = 0; i < after.length; i++) {
             harness.noteAcksOf(after[i]);
@@ -118,15 +122,44 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
             assertEquals(ahead + 1 + i, harness.trackedZxid(), "each follow-up create should be the next transaction");
         }
 
-        restart(follower, () -> { });
-        harness.awaitSync(follower, peers[follower]);
-        assertTrue(has(follower, "/ahead") && has(follower, "/after") && has(follower, "/after2"),
-            "the restarted follower lost a create");
+        // The second TRUNC, in F's same life (its database is the object the first sync left): F logs /ahead2, which
+        // the leader has not committed, and loses its leader; its follower's shutdown fast-forwards its database over
+        // its log, so it elects and registers with /ahead2's zxid and the leader tells it to TRUNC to /after2.
+        harness.holdAcksOf("/ahead2");
+        CountDownLatch ahead2Done = new CountDownLatch(1);
+        AtomicInteger ahead2Rc = new AtomicInteger(Integer.MIN_VALUE);
+        client.create("/ahead2", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT, (rc, path, ctx, name) -> {
+            ahead2Rc.set(rc);
+            ahead2Done.countDown();
+        }, null);
+        for (int sid = 1; sid <= PARTICIPANTS; sid++) {
+            harness.awaitAckFrom(sid);
+        }
+        assertEquals(ahead + 1 + after.length, harness.trackedZxid(), "the second held create should be the next one");
 
-        // The restarted life's construction (runFromConfig, where its replay runs) ends inside the test: it returns
-        // when its peer stops, and a recorded window closes before tear-down stops it.
+        harness.expectSync(follower);
+        harness.pauseForwardingOnce(follower);
+        disconnect(follower);
+        harness.awaitForwardingPaused();
+        harness.releaseAcks();
+        harness.awaitCommitted();
+        harness.releaseForwarding();
+        assertTrue(ahead2Done.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+            "the second held create did not finish");
+        assertEquals(Code.OK.intValue(), ahead2Rc.get());
+        harness.awaitSync(follower, peers[follower]);
+        assertTrue(has(follower, "/ahead") && has(follower, "/after") && has(follower, "/after2")
+            && has(follower, "/ahead2"), "the follower lost a create");
+
+        // F's life (its peer's run, where both syncs ran) ends inside the test: a recorded window closes before
+        // tear-down stops it.
         peers[follower].shutdown();
         peers[follower].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+    }
+
+    /** Server {@code sid} loses its leader without stopping: its follower ends and its peer elects and syncs again. */
+    private void disconnect(int sid) throws IOException {
+        peers[sid].getQuorumPeer().follower.getSocket().close();
     }
 
     /** Stop server {@code sid} (QuorumBase#shutdown joins its peer) and start its next life. */
