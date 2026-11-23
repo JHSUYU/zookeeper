@@ -39,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * that server's LearnerHandler). Natively the writes finish long before the takeover, so each reads
  * session.owner as its own server and no SessionMoved is thrown.
  *
- * GraphChecker's world orders the takeover's REVALIDATE before an old-connection write's read of
+ * Causym's world orders the takeover's REVALIDATE before an old-connection write's read of
  * session.owner (the takeover's delay is the workaround that keeps that order free: container-reuse's
  * "a delay and no happens-before"). That write throws SessionMoved at SessionTrackerImpl.checkSession; with
  * ZOOKEEPER-710 put back the connection stays open, so a later write on it throws there again. Each old
@@ -52,9 +52,9 @@ import org.slf4j.LoggerFactory;
  * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
  * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
-public class CausynthSessionMoved710Test extends ZKTestCase {
+public class CausymSessionMoved710Test extends ZKTestCase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CausynthSessionMoved710Test.class);
+    private static final Logger LOG = LoggerFactory.getLogger(CausymSessionMoved710Test.class);
     public static final int CONNECTION_TIMEOUT = ClientBase.CONNECTION_TIMEOUT;
     private static final long TAKEOVER_DELAY_MS = 5000;
 

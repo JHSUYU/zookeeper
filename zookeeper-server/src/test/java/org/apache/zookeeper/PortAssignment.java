@@ -68,8 +68,8 @@ public final class PortAssignment {
                 System.getProperty("test.junit.threads"),
                 threadId != null ? "threadid=" + threadId : System.getProperty("sun.java.command"));
             nextPort = portRange.getMinimum();
-            if (CausynthZk.automatic()) {
-                // GraphChecker: the replays of one case share a host, so each
+            if (CausymZk.automatic()) {
+                // Causym: the replays of one case share a host, so each
                 // starts where the free port the system gives it falls in the
                 // lower half of the range below the ephemeral ports, and every
                 // later port is above the one before: the ports are in the
