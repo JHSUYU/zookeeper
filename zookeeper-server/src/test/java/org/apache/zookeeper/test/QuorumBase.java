@@ -30,7 +30,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.TestableZooKeeper;
 import org.apache.zookeeper.server.quorum.Election;
@@ -133,8 +133,8 @@ public class QuorumBase extends ClientBase {
         s5dir = ClientBase.createTmpDir();
 
         startServers(withObservers, withOracle);
-        // GraphChecker: the ensemble is up.
-        CausynthNodes.ensembleUp(this);
+        // Causym: the ensemble is up.
+        CausymNodes.ensembleUp(this);
 
         OSMXBean osMbean = new OSMXBean();
         if (osMbean.getUnix()) {
@@ -261,10 +261,10 @@ public class QuorumBase extends ClientBase {
         s4.enableLocalSessionsUpgrading(localSessionsUpgradingEnabled);
         s5.enableLocalSessionsUpgrading(localSessionsUpgradingEnabled);
 
-        // GraphChecker: the peers start from the highest server id down, so a peer that starts after a quorum
+        // Causym: the peers start from the highest server id down, so a peer that starts after a quorum
         // elected its leader never outranks it: in a workload an election ends once every live peer voted, and a
         // later, higher peer won the votes of the peers still looking and led beside the elected leader, whose
-        // wait for its quorum never times out there (CausynthNodes.NEVER_MS).
+        // wait for its quorum never times out there (CausymNodes.NEVER_MS).
         LOG.info("start QuorumPeer 5");
         s5.start();
         LOG.info("start QuorumPeer 4");

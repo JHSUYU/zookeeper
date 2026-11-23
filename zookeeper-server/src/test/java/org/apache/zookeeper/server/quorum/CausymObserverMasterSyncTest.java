@@ -18,7 +18,7 @@
 
 package org.apache.zookeeper.server.quorum;
 
-import static org.apache.zookeeper.server.quorum.CausynthQuorumHarness.await;
+import static org.apache.zookeeper.server.quorum.CausymQuorumHarness.await;
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,7 +40,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * GraphChecker workload of ZOOKEEPER-5088 (apache/zookeeper PR 2454), the passing shape of
+ * Causym workload of ZOOKEEPER-5088 (apache/zookeeper PR 2454), the passing shape of
  * ObserverMasterPendingProposalTest. Follower F restarts while the leader holds a create outstanding, so F receives
  * it as a PROPOSAL during its sync and logs it after UPTODATE, before its ObserverMaster starts; the OM never queues
  * it. The create then commits and the observer O, restarted after the create's reply, syncs through F's
@@ -48,12 +48,12 @@ import org.junit.jupiter.api.Timeout;
  * sync read F's database before that apply, O would get an empty DIFF, no INFORM of the create, and the next INFORM
  * throws at ZKDatabase.addCommittedProposal.
  */
-public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
+public class CausymObserverMasterSyncTest extends QuorumPeerTestBase {
 
     private static final int PARTICIPANTS = 3;
     private static final int OBSERVER = PARTICIPANTS + 1;
 
-    private final CausynthQuorumHarness harness = new CausynthQuorumHarness();
+    private final CausymQuorumHarness harness = new CausymQuorumHarness();
     private final MainThread[] peers = new MainThread[OBSERVER + 1];
     private final int[] clientPorts = new int[OBSERVER + 1];
     private final int[] observerMasterPorts = new int[PARTICIPANTS + 1];
@@ -127,7 +127,7 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
         harness.awaitSync(follower, peers[follower]);
         harness.awaitAckFrom(follower);
         harness.releaseAcks();
-        assertTrue(pendingDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+        assertTrue(pendingDone.await(CausymQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
             "the held create did not finish");
         assertEquals(Code.OK.intValue(), pendingRc.get());
 
@@ -140,9 +140,9 @@ public class CausynthObserverMasterSyncTest extends QuorumPeerTestBase {
             // closes before tear-down stops it.
             List<Thread> serving = handlersOf(OBSERVER);
             peers[OBSERVER].shutdown();
-            peers[OBSERVER].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+            peers[OBSERVER].join(TimeUnit.SECONDS.toMillis(CausymQuorumHarness.WAIT_SECONDS));
             for (Thread handler : serving) {
-                handler.join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+                handler.join(TimeUnit.SECONDS.toMillis(CausymQuorumHarness.WAIT_SECONDS));
             }
         }
         assertTrue(handlersOf(OBSERVER).isEmpty(), "the ObserverMaster handler of the observer did not end");

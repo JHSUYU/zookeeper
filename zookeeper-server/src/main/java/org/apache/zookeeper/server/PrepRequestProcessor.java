@@ -31,7 +31,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.jute.Record;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.DeleteContainerRequest;
 import org.apache.zookeeper.KeeperException;
@@ -755,8 +755,8 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
      * @param request
      */
     protected void pRequest(Request request) throws RequestProcessorException {
-        // GraphChecker: this stage serves the request's own message.
-        Object causynth = CausynthZk.serve(request, zks, false);
+        // Causym: this stage serves the request's own message.
+        Object causym = CausymZk.serve(request, zks, false);
         try {
             request.setHdr(null);
             request.setTxn(null);
@@ -771,7 +771,7 @@ public class PrepRequestProcessor extends ZooKeeperCriticalThread implements Req
             nextProcessor.processRequest(request);
             ServerMetrics.getMetrics().PROPOSAL_PROCESS_TIME.add(Time.currentElapsedTime() - timeFinishedPrepare);
         } finally {
-            CausynthZk.served(causynth);
+            CausymZk.served(causym);
         }
     }
 

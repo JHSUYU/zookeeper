@@ -23,7 +23,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Collection;
 import org.apache.yetus.audience.InterfaceAudience;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 
 /**
  * Most simple HostProvider, resolves on every next() call.
@@ -46,12 +46,12 @@ public final class StaticHostProvider implements HostProvider {
     private final HostConnectionManager connectionManager;
 
     /**
-     * The seed of the host order: the clock's, but a constant in a GraphChecker workload
-     * ({@link CausynthZk#automatic}), as StaticHostProviderTest seeds its providers, so every recording and replay
+     * The seed of the host order: the clock's, but a constant in a Causym workload
+     * ({@link CausymZk#automatic}), as StaticHostProviderTest seeds its providers, so every recording and replay
      * tries the servers in one order.
      */
     private long seed() {
-        return CausynthZk.automatic() ? CausynthZk.HOST_ORDER_SEED : System.currentTimeMillis() ^ this.hashCode();
+        return CausymZk.automatic() ? CausymZk.HOST_ORDER_SEED : System.currentTimeMillis() ^ this.hashCode();
     }
 
     /**
