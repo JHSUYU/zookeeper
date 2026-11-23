@@ -36,7 +36,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.Record;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -400,12 +400,12 @@ public class NIOServerCnxn extends ServerCnxn {
         RequestHeader h = new RequestHeader();
         ByteBufferInputStream.byteBuffer2Record(incomingBuffer, h);
         RequestRecord request = RequestRecord.fromBytes(incomingBuffer.slice());
-        // GraphChecker: the server takes the request's message as it reads it.
-        Object causynth = CausynthZk.read(getSessionId(), h, zkServer);
+        // Causym: the server takes the request's message as it reads it.
+        Object causym = CausymZk.read(getSessionId(), h, zkServer);
         try {
             zkServer.processPacket(this, h, request);
         } finally {
-            CausynthZk.served(causynth);
+            CausymZk.served(causym);
         }
     }
 
@@ -448,12 +448,12 @@ public class NIOServerCnxn extends ServerCnxn {
         }
         BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(incomingBuffer));
         ConnectRequest request = protocolManager.deserializeConnectRequest(bia);
-        // GraphChecker: the server takes the client's connect request.
-        Object causynth = CausynthZk.connected(getRemoteSocketAddress(), zkServer, request);
+        // Causym: the server takes the client's connect request.
+        Object causym = CausymZk.connected(getRemoteSocketAddress(), zkServer, request);
         try {
             zkServer.processConnectRequest(this, request);
         } finally {
-            CausynthZk.served(causynth);
+            CausymZk.served(causym);
         }
         initialized = true;
     }

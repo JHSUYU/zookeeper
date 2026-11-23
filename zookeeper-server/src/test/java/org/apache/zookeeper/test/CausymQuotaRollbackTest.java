@@ -33,7 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * GraphChecker's workload of zk-inj-03: a client sets a hard count quota,
+ * Causym's workload of zk-inj-03: a client sets a hard count quota,
  * tolerating a call that lost its connection (it may have been made), and
  * lists the quota back.
  *
@@ -51,9 +51,9 @@ import org.junit.jupiter.api.Test;
  * of it lost its reply) does not change which request of the listing reads
  * the limit.</p>
  */
-public class CausynthQuotaRollbackTest extends ClientBase {
+public class CausymQuotaRollbackTest extends ClientBase {
 
-    private static final String PATH = "/causynth-quota";
+    private static final String PATH = "/causym-quota";
 
     @BeforeEach
     @Override
