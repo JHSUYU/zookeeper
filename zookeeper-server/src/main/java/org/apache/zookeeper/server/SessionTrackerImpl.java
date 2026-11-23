@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.SessionExpiredException;
 import org.apache.zookeeper.common.Time;
@@ -112,9 +112,9 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public SessionTrackerImpl(SessionExpirer expirer, ConcurrentMap<Long, Integer> sessionsWithTimeout, int tickTime, long serverId, ZooKeeperServerListener listener) {
         super("SessionTracker", listener);
         this.expirer = expirer;
-        // GraphChecker: in a workload sessions expire by the NEVER_MS interval (CausynthNodes#expiryInterval).
-        // GraphChecker: in a workload the queue counts its buckets from its start (CausynthNodes#expiryInterval).
-        this.sessionExpiryQueue = new ExpiryQueue<>(CausynthNodes.expiryInterval(tickTime), CausynthNodes.automatic());
+        // Causym: in a workload sessions expire by the NEVER_MS interval (CausymNodes#expiryInterval).
+        // Causym: in a workload the queue counts its buckets from its start (CausymNodes#expiryInterval).
+        this.sessionExpiryQueue = new ExpiryQueue<>(CausymNodes.expiryInterval(tickTime), CausymNodes.automatic());
         this.sessionsWithTimeout = sessionsWithTimeout;
         this.nextSessionId.set(initializeNextSessionId(serverId));
         for (Entry<Long, Integer> e : sessionsWithTimeout.entrySet()) {
@@ -162,16 +162,16 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     public void run() {
         try {
             while (running) {
-                // GraphChecker: in a workload each look of the expirer is a turn of its own, and one clock
-                // reading of it decides on the raw time to the next expiration (ExpiryQueue#causynthWaitTime)
+                // Causym: in a workload each look of the expirer is a turn of its own, and one clock
+                // reading of it decides on the raw time to the next expiration (ExpiryQueue#causymWaitTime)
                 // and the bucket it polls.
-                long causynth = CausynthNodes.beginTurn(this, "SESSION_EXPIRY");
-                boolean automatic = CausynthNodes.automatic();
+                long causym = CausymNodes.beginTurn(this, "SESSION_EXPIRY");
+                boolean automatic = CausymNodes.automatic();
                 long waitTime;
                 try {
                     long now = automatic ? Time.currentElapsedTime() : 0L;
                     waitTime = automatic
-                        ? sessionExpiryQueue.causynthWaitTime(now) : sessionExpiryQueue.getWaitTime();
+                        ? sessionExpiryQueue.causymWaitTime(now) : sessionExpiryQueue.getWaitTime();
                     if (waitTime <= 0) {
                         for (SessionImpl s : automatic ? sessionExpiryQueue.poll(now) : sessionExpiryQueue.poll()) {
                             ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
@@ -180,13 +180,13 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
                         }
                     }
                 } finally {
-                    CausynthNodes.endTurn(causynth);
+                    CausymNodes.endTurn(causym);
                 }
                 if (waitTime > 0) {
-                    // GraphChecker: in a workload the expirer looks again when a session is added
+                    // Causym: in a workload the expirer looks again when a session is added
                     // or touched (or the tracker shuts down), not when its wait times out.
-                    if (CausynthNodes.automatic()) {
-                        causynthAwaitChange();
+                    if (CausymNodes.automatic()) {
+                        causymAwaitChange();
                     } else {
                         Thread.sleep(waitTime);
                     }
@@ -218,26 +218,26 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
     private void updateSessionExpiry(SessionImpl s, int timeout) {
         logTraceTouchSession(s.sessionId, timeout, "");
         sessionExpiryQueue.update(s, timeout);
-        causynthChanged();
+        causymChanged();
     }
 
     /**
-     * GraphChecker: in a workload, the session changes the expirer has to look at, one item each, on a queue the
+     * Causym: in a workload, the session changes the expirer has to look at, one item each, on a queue the
      * expirer takes: each take starts a turn where the recording started it (a queue item's start is a slot of the
      * schedule), and no two changes fold into one turn.
      */
-    private final LinkedBlockingQueue<Object> causynthChanges = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<Object> causymChanges = new LinkedBlockingQueue<>();
 
-    /** GraphChecker: a session was added, touched, or the tracker shuts down: the expirer looks again. */
-    private void causynthChanged() {
-        if (CausynthNodes.automatic()) {
-            causynthChanges.add(new Object());
+    /** Causym: a session was added, touched, or the tracker shuts down: the expirer looks again. */
+    private void causymChanged() {
+        if (CausymNodes.automatic()) {
+            causymChanges.add(new Object());
         }
     }
 
-    private void causynthAwaitChange() throws InterruptedException {
+    private void causymAwaitChange() throws InterruptedException {
         if (running) {
-            causynthChanges.take();
+            causymChanges.take();
         }
     }
 
@@ -296,7 +296,7 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         LOG.info("Shutting down");
 
         running = false;
-        causynthChanged();
+        causymChanged();
         if (LOG.isTraceEnabled()) {
             ZooTrace.logTraceMessage(LOG, ZooTrace.getTextTraceLevel(), "Shutdown SessionTrackerImpl!");
         }
@@ -358,20 +358,20 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
         }
 
         if (session.isClosing()) {
-            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-01") SessionExpiredException();
+            throw new KeeperException.@edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-01") SessionExpiredException();
         }
 
         if (session.owner == null) {
             session.owner = owner;
         } else if (session.owner != owner) {
-            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-02,zk-inj-05") SessionMovedException();
+            throw new KeeperException.@edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-02,zk-inj-05") SessionMovedException();
         }
     }
 
     public synchronized void setOwner(long id, Object owner) throws SessionExpiredException {
         SessionImpl session = sessionsById.get(id);
         if (session == null || session.isClosing()) {
-            throw new KeeperException.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-03") SessionExpiredException();
+            throw new KeeperException.@edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-03") SessionExpiredException();
         }
         session.owner = owner;
     }

@@ -41,12 +41,12 @@ import org.junit.jupiter.api.Test;
  * then moves back to H and writes it again. Every write must succeed: the session follows its
  * client.
  *
- * movesBetweenTheFollowerAndTheLeader is the GraphChecker run's workload: testQuorum's two servers,
+ * movesBetweenTheFollowerAndTheLeader is the Causym run's workload: testQuorum's two servers,
  * H the follower and A the leader, so the only learner that ever revalidates the session is the
  * one follower. movesBetweenTwoFollowers is the demonstration: three servers, H and A the two
  * followers, so the session is revalidated through two learners in turn.
  */
-public class CausynthSessionMoveTest extends QuorumPeerTestBase {
+public class CausymSessionMoveTest extends QuorumPeerTestBase {
 
     private final List<MainThread> servers = new ArrayList<>();
 

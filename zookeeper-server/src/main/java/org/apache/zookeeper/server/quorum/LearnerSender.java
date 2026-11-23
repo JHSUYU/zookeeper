@@ -53,7 +53,7 @@ public class LearnerSender extends ZooKeeperCriticalThread {
                 }
 
                 learner.messageTracker.trackSent(p.getType());
-                CausynthQuorum.written(learner.causynthEnd, p);
+                CausymQuorum.written(learner.causymEnd, p);
                 learner.leaderOs.writeRecord(p, "packet");
             } catch (IOException e) {
                 handleException(this.getName(), e);

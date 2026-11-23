@@ -141,8 +141,8 @@ public class Request {
 
     public long zxid = -1;
 
-    /** GraphChecker: the quorum message this txn was logged under, served again where its log acknowledges it. */
-    public volatile Object causynthLogged;
+    /** Causym: the quorum message this txn was logged under, served again where its log acknowledges it. */
+    public volatile Object causymLogged;
 
     public final List<Id> authInfo;
 
