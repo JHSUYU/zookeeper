@@ -33,7 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * GraphChecker's workload of zk-inj-02: two lockers contend for a
+ * Causym's workload of zk-inj-02: two lockers contend for a
  * {@link WriteLock} whose directory has a hard count quota that fits exactly
  * the directory and one lock node per locker.
  *
@@ -51,10 +51,10 @@ import org.slf4j.LoggerFactory;
  * makes one more request, so the server's request processor takes another
  * item after the second locker's create whatever that create's outcome.</p>
  */
-public class CausynthWriteLockQuotaTest extends ClientBase {
+public class CausymWriteLockQuotaTest extends ClientBase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CausynthWriteLockQuotaTest.class);
-    private static final String DIR = "/causynth-locks";
+    private static final Logger LOG = LoggerFactory.getLogger(CausymWriteLockQuotaTest.class);
+    private static final String DIR = "/causym-locks";
     /** The directory counts itself: one lock node per locker fits. */
     private static final int COUNT_HARD_LIMIT = 3;
 
