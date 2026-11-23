@@ -31,7 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * GraphChecker's workload of zk-bugs-quota-init: a client sets a hard count
+ * Causym's workload of zk-bugs-quota-init: a client sets a hard count
  * quota the way a ZooKeeper client makes any call, retrying one that lost its
  * connection, raises the limit with a second call on the same path, and the
  * server enforces the raised limit.
@@ -41,9 +41,9 @@ import org.junit.jupiter.api.Test;
  * limit takes the update branch, which reads the stat.  The recording loses
  * no connection, so the update is the second call's.</p>
  */
-public class CausynthQuotaRetryTest extends ClientBase {
+public class CausymQuotaRetryTest extends ClientBase {
 
-    private static final String PATH = "/causynth-quota";
+    private static final String PATH = "/causym-quota";
     /** How often a call that lost its connection is made again. */
     private static final int ATTEMPTS = 3;
 

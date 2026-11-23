@@ -41,7 +41,7 @@ import org.slf4j.LoggerFactory;
  * sets the leader's session.owner to that server's LearnerHandler). Natively the multis finish long before the
  * takeover, so each reads session.owner as its own server and no SessionMoved is thrown.
  *
- * GraphChecker's world orders the takeover's REVALIDATE before an old-connection multi's read of
+ * Causym's world orders the takeover's REVALIDATE before an old-connection multi's read of
  * session.owner (the takeover's delay is the workaround that keeps that order free: container-reuse's
  * "a delay and no happens-before"). That multi's sub-op throws SessionMoved at SessionTrackerImpl.checkSession;
  * with ZOOKEEPER-2886 put back it stays a per-op ErrorResult, the connection stays open, and a later multi on
@@ -55,9 +55,9 @@ import org.slf4j.LoggerFactory;
  * Neither handle is closed at the end: a close sends closeSession, whose setSessionClosing is a second in-window
  * writer of the session's isClosing, which the target's checkSession also reads (the servers' shutdown ends both).
  */
-public class CausynthSessionMoved2886Test extends ZKTestCase {
+public class CausymSessionMoved2886Test extends ZKTestCase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CausynthSessionMoved2886Test.class);
+    private static final Logger LOG = LoggerFactory.getLogger(CausymSessionMoved2886Test.class);
     public static final int CONNECTION_TIMEOUT = ClientBase.CONNECTION_TIMEOUT;
     private static final long TAKEOVER_DELAY_MS = 5000;
 

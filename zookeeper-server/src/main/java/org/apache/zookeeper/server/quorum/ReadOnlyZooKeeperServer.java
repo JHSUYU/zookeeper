@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.server.DataTreeBean;
@@ -60,10 +60,10 @@ public class ReadOnlyZooKeeperServer extends ZooKeeperServer {
             self.getInitialConfig(),
             self.isReconfigEnabled());
         this.self = self;
-        // GraphChecker: the read-only server is its peer's, and no session it grants expires.
-        if (CausynthNodes.automatic()) {
-            CausynthNodes.serving(self, this);
-            setMaxSessionTimeout(CausynthNodes.NEVER_MS);
+        // Causym: the read-only server is its peer's, and no session it grants expires.
+        if (CausymNodes.automatic()) {
+            CausymNodes.serving(self, this);
+            setMaxSessionTimeout(CausymNodes.NEVER_MS);
         }
     }
 
@@ -129,7 +129,7 @@ public class ReadOnlyZooKeeperServer extends ZooKeeperServer {
         if (((LearnerSessionTracker) sessionTracker).isGlobalSession(sessionId)) {
             String msg = "Refusing global session reconnection in RO mode " + cnxn.getRemoteSocketAddress();
             LOG.info(msg);
-            throw new ServerCnxn.@edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-13") CloseRequestException(msg, ServerCnxn.DisconnectReason.RENEW_GLOBAL_SESSION_IN_RO_MODE);
+            throw new ServerCnxn.@edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-13") CloseRequestException(msg, ServerCnxn.DisconnectReason.RENEW_GLOBAL_SESSION_IN_RO_MODE);
         }
     }
 

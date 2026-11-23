@@ -30,7 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * GraphChecker's workload of zk-bugs-retry-seq-quota: ZooInspector's
+ * Causym's workload of zk-bugs-retry-seq-quota: ZooInspector's
  * retrying client creates two sequential children under a hard count quota
  * that fits exactly them.
  *
@@ -39,9 +39,9 @@ import org.junit.jupiter.api.Test;
  * sequential create is never the name the server gave the node.  The
  * recording loses no connection.</p>
  */
-public class CausynthZooKeeperRetryQuotaTest extends ClientBase {
+public class CausymZooKeeperRetryQuotaTest extends ClientBase {
 
-    private static final String PATH = "/causynth-retry-quota";
+    private static final String PATH = "/causym-retry-quota";
     /** The path counts itself: two children fit. */
     private static final int COUNT_HARD_LIMIT = 3;
 

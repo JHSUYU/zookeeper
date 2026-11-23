@@ -19,7 +19,7 @@
 package org.apache.zookeeper.server;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget;
+import edu.uva.liftlab.causym.annotation.CausymExceptionTarget;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.apache.jute.Record;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.Code;
@@ -148,16 +148,16 @@ public class FinalRequestProcessor implements RequestProcessor {
     }
 
     public void processRequest(Request request) {
-        // GraphChecker: this stage serves the request's own message.
-        Object causynth = CausynthZk.serve(request, zks, true);
+        // Causym: this stage serves the request's own message.
+        Object causym = CausymZk.serve(request, zks, true);
         try {
-            processServed(request, causynth);
+            processServed(request, causym);
         } finally {
-            CausynthZk.served(causynth);
+            CausymZk.served(causym);
         }
     }
 
-    private void processServed(Request request, Object causynth) {
+    private void processServed(Request request, Object causym) {
         LOG.debug("Processing request:: {}", request);
 
         if (LOG.isTraceEnabled()) {
@@ -623,8 +623,8 @@ public class FinalRequestProcessor implements RequestProcessor {
 
         updateStats(request, lastOp, lastZxid);
 
-        // GraphChecker: the reply leaves under the request's own message.
-        CausynthZk.respond(causynth, zks, rsp);
+        // Causym: the reply leaves under the request's own message.
+        CausymZk.respond(causym, zks, rsp);
 
         try {
             if (path == null || rsp == null) {
@@ -681,11 +681,11 @@ public class FinalRequestProcessor implements RequestProcessor {
         String path = getDataRequest.getPath();
         DataNode n = zks.getZKDatabase().getNode(path);
         if (n == null) {
-            // GraphChecker: a read of a node a client listed or created and
+            // Causym: a read of a node a client listed or created and
             // does not find -- a quota's stat after a failed initialization
             // (zk-bugs-quota-init), an election offer deleted after it was
             // listed (zk-bugs-election-offer).
-            throw new @CausynthExceptionTarget("zk-bugs-quota-init,zk-bugs-election-offer,zk-bugs-container-reuse") NoNodeException();
+            throw new @CausymExceptionTarget("zk-bugs-quota-init,zk-bugs-election-offer,zk-bugs-container-reuse") NoNodeException();
         }
         zks.checkACL(cnxn, zks.getZKDatabase().aclForNode(n), ZooDefs.Perms.READ, authInfo, path, null);
         Stat stat = new Stat();

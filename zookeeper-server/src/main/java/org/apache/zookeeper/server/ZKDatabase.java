@@ -330,7 +330,7 @@ public class ZKDatabase {
                 // This could happen if lastProcessedZxid is rewinded and database is re-synced.
                 // Currently, it only happens in test codes, but it should also be safe for production path.
                 return;
-            } else if (!allowDiscontinuousProposals // GraphChecker: the deciding comparison last, the throw's guard
+            } else if (!allowDiscontinuousProposals // Causym: the deciding comparison last, the throw's guard
                     && ZxidUtils.getEpochFromZxid(request.zxid) <= ZxidUtils.getEpochFromZxid(maxCommittedLog)
                     && request.zxid != maxCommittedLog + 1) {
                 String msg = String.format(
@@ -338,7 +338,7 @@ public class ZKDatabase {
                     ZxidUtils.zxidToString(request.zxid),
                     ZxidUtils.zxidToString(maxCommittedLog));
                 LOG.error(msg);
-                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-bugs-trunc-sync,zk-bugs-observer-master") IllegalStateException(msg);
+                throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-bugs-trunc-sync,zk-bugs-observer-master") IllegalStateException(msg);
             }
             PureRequestProposal p = new PureRequestProposal(request);
             committedLog.add(p);
