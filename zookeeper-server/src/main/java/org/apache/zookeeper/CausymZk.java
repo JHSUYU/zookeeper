@@ -18,7 +18,7 @@
 
 package org.apache.zookeeper;
 
-import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.causym.runtime.MessageDoors;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -34,9 +34,9 @@ import org.apache.zookeeper.proto.RequestHeader;
 import org.apache.zookeeper.server.Request;
 
 /**
- * GraphChecker: a client's request to its server on GraphChecker's message
- * doors, in a JVM that is a GraphChecker workload ({@link #AUTOMATIC} set);
- * anywhere else it does nothing and GraphChecker is never loaded.
+ * Causym: a client's request to its server on Causym's message
+ * doors, in a JVM that is a Causym workload ({@link #AUTOMATIC} set);
+ * anywhere else it does nothing and Causym is never loaded.
  *
  * <p>One message per request, client to server ({@link #TRANSPORT}, half
  * {@code REQUEST}).  The client sends it where the caller queues the request
@@ -53,7 +53,7 @@ import org.apache.zookeeper.server.Request;
  * is not the request's.</p>
  *
  * <p>The reply is a message too, server to client (half {@code RESPONSE}),
- * the way HBase's CausynthRpc answers: FinalRequestProcessor sends it under
+ * the way HBase's CausymRpc answers: FinalRequestProcessor sends it under
  * the request's own message, the exchange its stage serves ({@link
  * #respond}), with its reply record, and what it carries waits beside the
  * bytes under the request's correlation; the client's send thread receives
@@ -66,16 +66,16 @@ import org.apache.zookeeper.server.Request;
  * <p>In a quorum only the server the client is connected to serves the
  * request (its {@code cnxn}): a follower or observer in its request
  * processor, before it forwards it to the leader, which, as every other
- * peer, gets it on the learner stream (CausynthQuorum).  A session's connect
+ * peer, gets it on the learner stream (CausymQuorum).  A session's connect
  * request is a message too ({@code CONNECT}, {@link #connecting}, {@link
  * #connected}): the session the server creates for it is queued under it.
  * Not wired: watch notifications (a watcher runs on the client's event
  * thread) and pings.</p>
  */
-public final class CausynthZk {
+public final class CausymZk {
 
-    /** Set on a JVM that GraphChecker records or replays. */
-    public static final String AUTOMATIC = "causynth.cluster.automatic";
+    /** Set on a JVM that Causym records or replays. */
+    public static final String AUTOMATIC = "causym.cluster.automatic";
     /** The transport of a client's requests, and of their fault doors. */
     public static final String TRANSPORT = "ZOOKEEPER";
     private static final boolean ON = Boolean.getBoolean(AUTOMATIC);
@@ -96,10 +96,10 @@ public final class CausynthZk {
     /** The replies on the wire, by their request's correlation: what each carries. */
     private static final Map<String, MessageDoors.Outbound> REPLIES = new ConcurrentHashMap<>();
 
-    private CausynthZk() {
+    private CausymZk() {
     }
 
-    /** Whether this JVM is a GraphChecker workload. */
+    /** Whether this JVM is a Causym workload. */
     public static boolean automatic() {
         return ON;
     }
@@ -150,7 +150,7 @@ public final class CausynthZk {
             || header.getType() == ZooDefs.OpCode.auth) {
             return null;
         }
-        CausynthNodes.requesting(cnxn);
+        CausymNodes.requesting(cnxn);
         MessageDoors.Outbound outbound = MessageDoors.outbound(TRANSPORT,
             "zk-" + REQUESTS.incrementAndGet(), ATTEMPT, MessageDoors.REQUEST, cnxn, null);
         return outbound.active() ? new Sent(cnxn, outbound) : null;

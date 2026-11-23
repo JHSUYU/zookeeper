@@ -251,10 +251,10 @@ public class FileTxnSnapLog {
      */
     public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
         long snapLoadingStartTime = Time.currentElapsedTime();
-        // GraphChecker: the latest snapshot is a read of the peer's snapshot store.
-        CausynthSnapshots.reading(this);
+        // Causym: the latest snapshot is a read of the peer's snapshot store.
+        CausymSnapshots.reading(this);
         long deserializeResult = snapLog.deserialize(dt, sessions);
-        CausynthSnapshots.restored(this, dt, deserializeResult);
+        CausymSnapshots.restored(this, dt, deserializeResult);
         ServerMetrics.getMetrics().STARTUP_SNAP_LOAD_TIME.add(Time.currentElapsedTime() - snapLoadingStartTime);
         FileTxnLog txnLog = new FileTxnLog(dataDir);
         boolean trustEmptyDB;
@@ -481,11 +481,11 @@ public class FileTxnSnapLog {
         long lastZxid = dataTree.lastProcessedZxid;
         File snapshotFile = new File(snapDir, Util.makeSnapshotName(lastZxid));
         LOG.info("Snapshotting: 0x{} to {}", Long.toHexString(lastZxid), snapshotFile);
-        // GraphChecker: a snapshot is a write of the peer's snapshot store, its version the zxid it covers.
-        long causynth = CausynthSnapshots.saving(this);
+        // Causym: a snapshot is a write of the peer's snapshot store, its version the zxid it covers.
+        long causym = CausymSnapshots.saving(this);
         try {
             snapLog.serialize(dataTree, sessionsWithTimeouts, snapshotFile, syncSnap);
-            CausynthSnapshots.saved(this, lastZxid);
+            CausymSnapshots.saved(this, lastZxid);
             return snapshotFile;
         } catch (IOException e) {
             if (snapshotFile.length() == 0) {
@@ -507,7 +507,7 @@ public class FileTxnSnapLog {
             }
             throw e;
         } finally {
-            CausynthSnapshots.ended(this, causynth);
+            CausymSnapshots.ended(this, causym);
         }
     }
 

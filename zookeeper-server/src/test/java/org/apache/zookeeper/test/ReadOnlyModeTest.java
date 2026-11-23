@@ -30,7 +30,7 @@ import java.io.LineNumberReader;
 import java.io.StringReader;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NotReadOnlyException;
@@ -297,9 +297,9 @@ public class ReadOnlyModeTest extends ZKTestCase {
             ByteArrayOutputStream os = loggerTestTool.getOutputStream();
 
             qu.shutdown(2);
-            // GraphChecker: in a workload the client looks for a writable server only once both new lives serve
+            // Causym: in a workload the client looks for a writable server only once both new lives serve
             // (released below), so it probes them in its host order, not on the clock's backoff
-            CausynthZk.holdWritableSeek();
+            CausymZk.holdWritableSeek();
             CountdownWatcher watcher = new CountdownWatcher();
             ZooKeeper zk = new ZooKeeper(qu.getConnString(), CONNECTION_TIMEOUT, watcher, true);
             watcher.waitForConnected(CONNECTION_TIMEOUT);
@@ -314,10 +314,10 @@ public class ReadOnlyModeTest extends ZKTestCase {
             qu.start(2);
             qu.start(3);
             ClientBase.waitForServerUp(qu.getConnString(), 2000);
-            if (CausynthZk.automatic()) {
+            if (CausymZk.automatic()) {
                 awaitWritable(2);
                 awaitWritable(3);
-                CausynthZk.releaseWritableSeek();
+                CausymZk.releaseWritableSeek();
             }
             watcher.waitForConnected(CONNECTION_TIMEOUT);
             zk.create("/test", "test".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
@@ -343,7 +343,7 @@ public class ReadOnlyModeTest extends ZKTestCase {
         }
     }
 
-    /** GraphChecker: until server {@code sid} answers the client's own probe ("isro") as writable. */
+    /** Causym: until server {@code sid} answers the client's own probe ("isro") as writable. */
     private void awaitWritable(int sid) throws Exception {
         long deadline = Time.currentElapsedTime() + CONNECTION_TIMEOUT;
         while (!"rw".equals(probe(sid))) {

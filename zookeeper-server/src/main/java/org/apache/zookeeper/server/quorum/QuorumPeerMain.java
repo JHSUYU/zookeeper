@@ -22,7 +22,7 @@ import java.io.IOException;
 import javax.management.JMException;
 import javax.security.sasl.SaslException;
 import org.apache.yetus.audience.InterfaceAudience;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.audit.ZKAuditProvider;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.jmx.ManagedUtil;
@@ -37,7 +37,7 @@ import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperServerMain;
 import org.apache.zookeeper.server.admin.AdminServer.AdminServerException;
 import org.apache.zookeeper.server.auth.ProviderRegistry;
-import org.apache.zookeeper.server.persistence.CausynthSnapshots;
+import org.apache.zookeeper.server.persistence.CausymSnapshots;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog;
 import org.apache.zookeeper.server.persistence.FileTxnSnapLog.DatadirException;
 import org.apache.zookeeper.server.util.JvmPauseMonitor;
@@ -136,12 +136,12 @@ public class QuorumPeerMain {
         purgeMgr.start();
 
         if (args.length == 1 && config.isDistributed()) {
-            // GraphChecker: the peer's construction and start are its next life's.
-            Object causynth = CausynthNodes.constructing(config.getServerId());
+            // Causym: the peer's construction and start are its next life's.
+            Object causym = CausymNodes.constructing(config.getServerId());
             try {
                 runFromConfig(config);
             } finally {
-                CausynthNodes.constructed(causynth);
+                CausymNodes.constructed(causym);
             }
         } else {
             LOG.warn("Either no config or no quorum defined in config, running in standalone mode");
@@ -183,8 +183,8 @@ public class QuorumPeerMain {
             }
 
             quorumPeer = getQuorumPeer();
-            // GraphChecker: the peer's snapshots are its own store.
-            quorumPeer.setTxnFactory(CausynthSnapshots.owned(
+            // Causym: the peer's snapshots are its own store.
+            quorumPeer.setTxnFactory(CausymSnapshots.owned(
                 new FileTxnSnapLog(config.getDataLogDir(), config.getDataDir()), config.getServerId()));
             quorumPeer.enableLocalSessions(config.areLocalSessionsEnabled());
             quorumPeer.enableLocalSessionsUpgrading(config.isLocalSessionsUpgradingEnabled());
