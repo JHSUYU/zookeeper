@@ -32,7 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Workload for zk-inj-04 (point zk-adhoc-01), from CausynthSessionMoved710Test. A client on a follower
+ * Workload for zk-inj-04 (point zk-adhoc-01), from CausymSessionMoved710Test. A client on a follower
  * creates a node, then writes it on a thread of its own while a closer thread, started before the write and
  * with no happens-before from it, waits CLOSE_DELAY_MS and closes the client. Natively the write is served
  * long before the close, so its checkSession at the leader reads the session as open.
@@ -40,12 +40,12 @@ import org.slf4j.LoggerFactory;
  * The write's forwarded request reaches the leader's PrepRequestProcessor before the close's, as the client
  * sent them; the case's world is the close's arrival at the leader (the follower's LearnerHandler) before
  * the write's checkSession there. The write runs on a thread of its own, so its client request is rooted at
- * that thread's start, a point a confirmation replay can hold (CausynthSessionMoved710Test's second write).
+ * that thread's start, a point a confirmation replay can hold (CausymSessionMoved710Test's second write).
  * The write catches its KeeperException, which acts only after the throw.
  */
-public class CausynthSessionCloseOrderTest extends ZKTestCase {
+public class CausymSessionCloseOrderTest extends ZKTestCase {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CausynthSessionCloseOrderTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(CausymSessionCloseOrderTest.class);
     public static final int CONNECTION_TIMEOUT = ClientBase.CONNECTION_TIMEOUT;
     private static final long CLOSE_DELAY_MS = 2000;
 

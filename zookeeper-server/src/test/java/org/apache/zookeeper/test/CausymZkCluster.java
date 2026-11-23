@@ -18,8 +18,8 @@
 
 package org.apache.zookeeper.test;
 
-import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
-import edu.uva.liftlab.graphchecker.runtime.Sessions;
+import edu.uva.liftlab.causym.runtime.MessageDoors;
+import edu.uva.liftlab.causym.runtime.Sessions;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -27,37 +27,37 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.server.ZKDatabase;
 import org.apache.zookeeper.server.ZooKeeperServer;
 
 /**
- * What makes a {@link ClientBase} test a GraphChecker workload as it is
- * written, when {@link CausynthNodes#automatic} holds on its JVM: its server
+ * What makes a {@link ClientBase} test a Causym workload as it is
+ * written, when {@link CausymNodes#automatic} holds on its JVM: its server
  * registered as a node, and no session it grants expiring on the wall clock.
  * Its clients are nodes of their own, made so in ZooKeeper's constructor, and
  * the first one {@link ClientBase#createClient} makes opens the recorded
  * window, with one request ({@code test}) on the thread that made it, which
  * runs the rest of the test's set-up and the test; the window closes when
- * ClientBase tears down ({@link CausynthNodes}).
+ * ClientBase tears down ({@link CausymNodes}).
  *
  * <p>Each server is registered whole as {@code auto0/server<i>}: the
  * ZooKeeperServer, its request processors and throttler, its session
  * tracker, its connection factory and that factory's threads, and its
- * database -- the objects GraphChecker's attribution finds on a thread's
+ * database -- the objects Causym's attribution finds on a thread's
  * frames.</p>
  *
  * <p>No bound expires: the recording runs on a JIT and every replay on an
  * interpreter many times slower.  A server grants any session timeout up to
- * {@link CausynthNodes#NEVER_MS}, and a client asks for that much, so no
+ * {@link CausymNodes#NEVER_MS}, and a client asks for that much, so no
  * session expires and no client pings or gives up on a read while a replay
  * waits for a turn.</p>
  *
  * <p>A planted SessionExpired expires the session at the server that holds
  * it ({@link #expire}): a registered server, or a quorum's role server
- * ({@link CausynthNodes#roleServers}).</p>
+ * ({@link CausymNodes#roleServers}).</p>
  */
-public final class CausynthZkCluster {
+public final class CausymZkCluster {
 
     private static final String NODE = "CLUSTER_NODE";
 
@@ -65,20 +65,20 @@ public final class CausynthZkCluster {
 
     static {
         if (automatic()) {
-            Sessions.expirer(CausynthZkCluster::expire);
+            Sessions.expirer(CausymZkCluster::expire);
         }
     }
 
-    private CausynthZkCluster() {
+    private CausymZkCluster() {
     }
 
     public static boolean automatic() {
-        return CausynthNodes.automatic();
+        return CausymNodes.automatic();
     }
 
     /** Before the server starts: no session it grants expires. */
     public static void configure(ZooKeeperServer server) {
-        server.setMaxSessionTimeout(CausynthNodes.NEVER_MS);
+        server.setMaxSessionTimeout(CausymNodes.NEVER_MS);
     }
 
     /** A server that is up, with every object it runs its work through. */
@@ -90,18 +90,18 @@ public final class CausynthZkCluster {
         SERVERS.put(server, name);
         List<Object> aliases = new ArrayList<>();
         // PrepRequestProcessor -> SyncRequestProcessor -> FinalRequestProcessor
-        for (Object processor = CausynthNodes.field(server, "firstProcessor"); processor != null;
-             processor = CausynthNodes.field(processor, "nextProcessor")) {
+        for (Object processor = CausymNodes.field(server, "firstProcessor"); processor != null;
+             processor = CausymNodes.field(processor, "nextProcessor")) {
             aliases.add(processor);
         }
-        aliases.add(CausynthNodes.field(server, "requestThrottler"));
+        aliases.add(CausymNodes.field(server, "requestThrottler"));
         aliases.add(server.getSessionTracker());
         ZKDatabase database = server.getZKDatabase();
         aliases.add(database);
         aliases.add(database.getDataTree());
         Object factory = server.getServerCnxnFactory();
         aliases.add(factory);
-        aliases.addAll(CausynthNodes.threadsOf(factory));
+        aliases.addAll(CausymNodes.threadsOf(factory));
         MessageDoors.registerNode(server, NODE, "ZK_SERVER", name, aliases.toArray());
     }
 
@@ -125,7 +125,7 @@ public final class CausynthZkCluster {
 
     /**
      * A planted SessionExpired made real ({@code Sessions#expires}), as HBase's
-     * MiniZooKeeperCluster#causynthExpire: the session of the door's client
+     * MiniZooKeeperCluster#causymExpire: the session of the door's client
      * expired at the server that holds it, which deletes its ephemeral nodes;
      * the client's next operations fail by themselves.  The server's close is
      * awaited (bounded), so every run sees the same store after it.  False for
@@ -137,10 +137,10 @@ public final class CausynthZkCluster {
         }
         long session = ((ZooKeeper) owner).getSessionId();
         List<ZooKeeperServer> servers;
-        synchronized (CausynthZkCluster.class) {
+        synchronized (CausymZkCluster.class) {
             servers = new ArrayList<>(SERVERS.keySet());
         }
-        servers.addAll(CausynthNodes.roleServers());
+        servers.addAll(CausymNodes.roleServers());
         for (ZooKeeperServer server : servers) {
             Map<Long, Integer> sessions;
             try {

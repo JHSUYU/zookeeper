@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.jmx.MBeanRegistry;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.server.ZKDatabase;
@@ -140,8 +140,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
     Runnable ping = new Runnable() {
         @Override
         public void run() {
-            // GraphChecker: in a workload, the observers in server id order.
-            for (LearnerHandler lh : CausynthNodes.bySid(activeObservers, LearnerHandler::getSid)) {
+            // Causym: in a workload, the observers in server id order.
+            for (LearnerHandler lh : CausymNodes.bySid(activeObservers, LearnerHandler::getSid)) {
                 lh.ping();
             }
         }
@@ -356,8 +356,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
 
     void proposalReceived(QuorumPacket qp) {
         QuorumPacket inform = new QuorumPacket(Leader.INFORM, qp.getZxid(), qp.getData(), null);
-        // GraphChecker: the INFORM carries the header of the PROPOSAL it relays.
-        CausynthQuorum.carrying(inform, CausynthQuorum.parsedHeader());
+        // Causym: the INFORM carries the header of the PROPOSAL it relays.
+        CausymQuorum.carrying(inform, CausymQuorum.parsedHeader());
         proposedPkts.add(inform);
     }
 
@@ -373,7 +373,7 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
                 zxid,
                 pkt.getZxid());
             LOG.error(m);
-            throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-10") RuntimeException(m);
+            throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-10") RuntimeException(m);
         }
         proposedPkts.remove();
         return pkt;
@@ -403,8 +403,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
     }
 
     private synchronized void sendPacket(final QuorumPacket pkt) {
-        // GraphChecker: in a workload, the observers in server id order.
-        for (LearnerHandler lh : CausynthNodes.bySid(activeObservers, LearnerHandler::getSid)) {
+        // Causym: in a workload, the observers in server id order.
+        for (LearnerHandler lh : CausymNodes.bySid(activeObservers, LearnerHandler::getSid)) {
             lh.queuePacket(pkt);
         }
         lastProposedZxid = pkt.getZxid();
@@ -454,8 +454,8 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
         }
         thread = new Thread(this, "ObserverMaster");
         thread.start();
-        // GraphChecker: in a workload no periodic pings (a learner waits NEVER_MS for a packet).
-        if (!CausynthNodes.automatic()) {
+        // Causym: in a workload no periodic pings (a learner waits NEVER_MS for a packet).
+        if (!CausymNodes.automatic()) {
             pinger = Executors.newSingleThreadScheduledExecutor();
             pinger.scheduleAtFixedRate(ping, self.tickTime / 2, self.tickTime / 2, TimeUnit.MILLISECONDS);
         }
@@ -475,7 +475,7 @@ public class ObserverMaster extends LearnerMaster implements Runnable {
                 s.setSoTimeout(self.tickTime * self.initLimit);
                 BufferedInputStream is = new BufferedInputStream(s.getInputStream());
                 LearnerHandler lh = new LearnerHandler(s, is, this);
-                lh.causynthEnd = CausynthQuorum.leading(self, s);
+                lh.causymEnd = CausymQuorum.leading(self, s);
                 lh.start();
             } catch (Exception e) {
                 if (listenerRunning) {
