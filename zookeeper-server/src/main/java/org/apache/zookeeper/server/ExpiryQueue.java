@@ -44,9 +44,9 @@ public class ExpiryQueue<E> {
 
     private final AtomicLong nextExpirationTime = new AtomicLong();
     private final int expirationInterval;
-    // GraphChecker: where the buckets count from: 0 (stock), or, for a queue made to count from its start, its
+    // Causym: where the buckets count from: 0 (stock), or, for a queue made to count from its start, its
     // constructor's clock read, so its first bucket does not hang on where the host's clock stands on the grid.
-    private final long causynthBase;
+    private final long causymBase;
 
     public ExpiryQueue(int expirationInterval) {
         this(expirationInterval, false);
@@ -55,12 +55,12 @@ public class ExpiryQueue<E> {
     public ExpiryQueue(int expirationInterval, boolean fromStart) {
         this.expirationInterval = expirationInterval;
         long now = Time.currentElapsedTime();
-        this.causynthBase = fromStart ? now : 0L;
+        this.causymBase = fromStart ? now : 0L;
         nextExpirationTime.set(roundToNextInterval(now));
     }
 
     private long roundToNextInterval(long time) {
-        return causynthBase + ((time - causynthBase) / expirationInterval + 1) * expirationInterval;
+        return causymBase + ((time - causymBase) / expirationInterval + 1) * expirationInterval;
     }
 
     /**
@@ -136,11 +136,11 @@ public class ExpiryQueue<E> {
     }
 
     /**
-     * GraphChecker: the time from {@code now} to the next expiration, negative once it has passed:
+     * Causym: the time from {@code now} to the next expiration, negative once it has passed:
      * {@link #getWaitTime()} without its floor at 0, so a caller's {@code <= 0} decides on its clock reading itself
      * and no branch inside stands before it.
      */
-    public long causynthWaitTime(long now) {
+    public long causymWaitTime(long now) {
         return nextExpirationTime.get() - now;
     }
 
@@ -157,7 +157,7 @@ public class ExpiryQueue<E> {
     }
 
     /**
-     * GraphChecker: {@link #poll()} at a clock reading the caller made, so one reading decides both whether the
+     * Causym: {@link #poll()} at a clock reading the caller made, so one reading decides both whether the
      * next expiration has passed and the bucket taken.
      */
     public Set<E> poll(long now) {

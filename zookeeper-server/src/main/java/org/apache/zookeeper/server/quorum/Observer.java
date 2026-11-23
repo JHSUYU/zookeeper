@@ -136,7 +136,7 @@ public class Observer extends Learner {
                 pendingRevalidations.clear();
             }
         } finally {
-            CausynthQuorum.left();
+            CausymQuorum.left();
             currentLearnerMaster = null;
             zk.unregisterJMX(this);
             if (connectTime != 0) {
@@ -203,8 +203,8 @@ public class Observer extends Learner {
         case Leader.INFORM:
             ServerMetrics.getMetrics().LEARNER_COMMIT_RECEIVED_COUNT.add(1);
             logEntry = SerializeUtils.deserializeTxn(qp.getData());
-            // GraphChecker: the header the INFORM carried.
-            CausynthQuorum.parsedTxn(logEntry.getHeader());
+            // Causym: the header the INFORM carried.
+            CausymQuorum.parsedTxn(logEntry.getHeader());
             Request request = logEntry.toRequest();
             request.logLatency(ServerMetrics.getMetrics().COMMIT_PROPAGATION_LATENCY);
             ObserverZooKeeperServer obs = (ObserverZooKeeperServer) zk;

@@ -34,7 +34,7 @@
   </description>
 
   <dependencies>
-    <!-- GraphChecker: CausynthWriteLockQuotaTest sets its quota with the CLI's SetQuotaCommand, whose commons-cli
+    <!-- Causym: CausymWriteLockQuotaTest sets its quota with the CLI's SetQuotaCommand, whose commons-cli
          zookeeper-server only provides -->
     <dependency>
       <groupId>commons-cli</groupId>
