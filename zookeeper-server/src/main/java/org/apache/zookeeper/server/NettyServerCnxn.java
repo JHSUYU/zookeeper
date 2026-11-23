@@ -42,7 +42,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.jute.BinaryInputArchive;
 import org.apache.jute.Record;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.ClientCnxn;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -503,23 +503,23 @@ public class NettyServerCnxn extends ServerCnxn {
                             RequestHeader h = new RequestHeader();
                             ByteBufferInputStream.byteBuffer2Record(bb, h);
                             RequestRecord request = RequestRecord.fromBytes(bb.slice());
-                            // GraphChecker: the server takes the request's message as it reads it.
-                            Object causynth = CausynthZk.read(getSessionId(), h, zks);
+                            // Causym: the server takes the request's message as it reads it.
+                            Object causym = CausymZk.read(getSessionId(), h, zks);
                             try {
                                 zks.processPacket(this, h, request);
                             } finally {
-                                CausynthZk.served(causynth);
+                                CausymZk.served(causym);
                             }
                         } else {
                             LOG.debug("got conn req request from {}", getRemoteSocketAddress());
                             BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(bb));
                             ConnectRequest request = protocolManager.deserializeConnectRequest(bia);
-                            // GraphChecker: the server takes the client's connect request.
-                            Object causynth = CausynthZk.connected(getRemoteSocketAddress(), zks, request);
+                            // Causym: the server takes the client's connect request.
+                            Object causym = CausymZk.connected(getRemoteSocketAddress(), zks, request);
                             try {
                                 zks.processConnectRequest(this, request);
                             } finally {
-                                CausynthZk.served(causynth);
+                                CausymZk.served(causym);
                             }
                             initialized = true;
                         }

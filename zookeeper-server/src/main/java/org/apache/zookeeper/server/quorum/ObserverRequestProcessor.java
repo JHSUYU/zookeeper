@@ -20,7 +20,7 @@ package org.apache.zookeeper.server.quorum;
 
 import java.io.IOException;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.server.Request;
@@ -76,8 +76,8 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
                     break;
                 }
 
-                // GraphChecker: this stage serves the request's own message.
-                Object causynth = CausynthZk.serve(request, zks, false);
+                // Causym: this stage serves the request's own message.
+                Object causym = CausymZk.serve(request, zks, false);
                 try {
                     // Screen quorum requests against ACLs first
                     if (!zks.authWriteRequest(request)) {
@@ -125,7 +125,7 @@ public class ObserverRequestProcessor extends ZooKeeperCriticalThread implements
                         break;
                     }
                 } finally {
-                    CausynthZk.served(causynth);
+                    CausymZk.served(causym);
                 }
             }
         } catch (RuntimeException e) { // spotbugs require explicit catch of RuntimeException
