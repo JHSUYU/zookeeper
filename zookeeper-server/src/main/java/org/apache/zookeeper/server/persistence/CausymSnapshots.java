@@ -18,17 +18,17 @@
 
 package org.apache.zookeeper.server.persistence;
 
-import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.causym.runtime.MessageDoors;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.server.DataTree;
 
 /**
- * GraphChecker: a quorum peer's snapshots as a store, in a JVM that is a GraphChecker workload
- * ({@link CausynthZk#automatic}); anywhere else it does nothing and GraphChecker is never loaded.
+ * Causym: a quorum peer's snapshots as a store, in a JVM that is a Causym workload
+ * ({@link CausymZk#automatic}); anywhere else it does nothing and Causym is never loaded.
  *
  * <p>The store is the peer's ({@code snapshot/peer<sid>}, named where its configuration makes its
  * {@link FileTxnSnapLog}), each snapshot a version, numbered by the zxid it covers: {@link FileTxnSnapLog#save}
@@ -36,18 +36,18 @@ import org.apache.zookeeper.server.DataTree;
  * life's replay, which starts after the snapshot's zxid, reads the version its previous life wrote, and that writer
  * (a learner's snapshot at NEWLEADER, say) is one of its reads' writers.</p>
  */
-public final class CausynthSnapshots {
+public final class CausymSnapshots {
 
     /** The transport of a peer's snapshot store. */
     public static final String TRANSPORT = "ZK_SNAPSHOT";
     private static final Map<FileTxnSnapLog, String> STORES = Collections.synchronizedMap(new WeakHashMap<>());
 
-    private CausynthSnapshots() {
+    private CausymSnapshots() {
     }
 
     /** {@code log} is server {@code sid}'s: its snapshots are that peer's store. */
     public static FileTxnSnapLog owned(FileTxnSnapLog log, long sid) {
-        if (CausynthZk.automatic()) {
+        if (CausymZk.automatic()) {
             STORES.put(log, "snapshot/peer" + sid);
         }
         return log;
