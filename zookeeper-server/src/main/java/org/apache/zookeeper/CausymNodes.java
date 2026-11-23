@@ -18,7 +18,7 @@
 
 package org.apache.zookeeper;
 
-import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.causym.runtime.MessageDoors;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -43,10 +43,10 @@ import org.apache.zookeeper.server.quorum.FastLeaderElection;
 import org.apache.zookeeper.server.quorum.QuorumPeer;
 
 /**
- * GraphChecker: the nodes of a JVM that is a GraphChecker workload ({@link
- * CausynthZk#AUTOMATIC} set), named alike in the recording and in every
+ * Causym: the nodes of a JVM that is a Causym workload ({@link
+ * CausymZk#AUTOMATIC} set), named alike in the recording and in every
  * replay, and the window the workload is recorded in; anywhere else it does
- * nothing and GraphChecker is never loaded.
+ * nothing and Causym is never loaded.
  *
  * <p>Every client is a node, {@code auto0/client<i>} in the order the
  * clients are made ({@link #client}, from ZooKeeper's constructor), with its
@@ -76,11 +76,11 @@ import org.apache.zookeeper.server.quorum.QuorumPeer;
  * among them leads, whichever peers happened to be up when a quorum of them
  * agreed.</p>
  */
-public final class CausynthNodes {
+public final class CausymNodes {
 
     /** Longer than any case runs: a bound that cannot expire. */
     public static final int NEVER_MS = (int) TimeUnit.HOURS.toMillis(6);
-    private static final boolean ON = CausynthZk.automatic();
+    private static final boolean ON = CausymZk.automatic();
     private static final String NODE = "CLUSTER_NODE";
     private static final String CLIENT = "EXTERNAL_APP";
     private static final String PEER = "ZK_PEER";
@@ -107,7 +107,7 @@ public final class CausynthNodes {
     private static boolean closed;
     private static long testRequest;
 
-    private CausynthNodes() {
+    private CausymNodes() {
     }
 
     public static boolean automatic() {
@@ -196,7 +196,7 @@ public final class CausynthNodes {
         }
         long sid = peer.getMyId();
         Object node;
-        synchronized (CausynthNodes.class) {
+        synchronized (CausymNodes.class) {
             node = CONSTRUCTED.remove(sid) ? PEERS.get(sid) : life(sid);
             LIVE.add(sid);
             List<Object> aliases = new ArrayList<>();
@@ -238,7 +238,7 @@ public final class CausynthNodes {
             return null;
         }
         Object node;
-        synchronized (CausynthNodes.class) {
+        synchronized (CausymNodes.class) {
             node = life(sid);
             CONSTRUCTED.add(sid);
         }
@@ -369,14 +369,14 @@ public final class CausynthNodes {
         if (ON) {
             Election election = peer.getElectionAlg();
             if (election instanceof FastLeaderElection) {
-                ((FastLeaderElection) election).causynthWake();
+                ((FastLeaderElection) election).causymWake();
             }
         }
     }
 
     private static void wakeElections() {
         List<QuorumPeer> peers;
-        synchronized (CausynthNodes.class) {
+        synchronized (CausymNodes.class) {
             peers = new ArrayList<>(STARTED.keySet());
         }
         for (QuorumPeer peer : peers) {
@@ -405,7 +405,7 @@ public final class CausynthNodes {
         if (opened || Thread.currentThread().getClass().getEnclosingClass() == ClientCnxn.class) {
             return;
         }
-        synchronized (CausynthNodes.class) {
+        synchronized (CausymNodes.class) {
             if (!PEERS.isEmpty()) {
                 openWindow(connection);
             }

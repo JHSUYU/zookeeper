@@ -24,7 +24,7 @@ import java.io.File;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import org.apache.zookeeper.metrics.MetricsUtils;
-import org.apache.zookeeper.test.CausynthZkCluster;
+import org.apache.zookeeper.test.CausymZkCluster;
 import org.apache.zookeeper.util.ServiceUtils;
 import org.hamcrest.CustomMatcher;
 import org.hamcrest.Description;
@@ -52,9 +52,9 @@ public class ZKTestCase {
     static {
         // Disable System.exit in tests.
         ServiceUtils.setSystemExitProcedure(ServiceUtils.LOG_ONLY);
-        // GraphChecker: every test JVM of a workload registers its session expirer (the class's
+        // Causym: every test JVM of a workload registers its session expirer (the class's
         // initializer), whatever cluster it builds.
-        CausynthZkCluster.automatic();
+        CausymZkCluster.automatic();
     }
 
     private String testName;
@@ -113,8 +113,8 @@ public class ZKTestCase {
 
     @AfterEach
     public void finished(TestInfo testInfo) {
-        // GraphChecker: the test is over, if its own tear-down did not say so.
-        CausynthNodes.endTest();
+        // Causym: the test is over, if its own tear-down did not say so.
+        CausymNodes.endTest();
         LOG.info("FINISHED {}", testInfo.getTestMethod());
     }
 

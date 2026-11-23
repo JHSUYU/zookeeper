@@ -94,8 +94,8 @@ public class Learner {
     protected BufferedOutputStream bufferedOutput;
 
     protected Socket sock;
-    /** GraphChecker: this learner's end of the stream on {@link #sock}. */
-    CausynthQuorum.End causynthEnd;
+    /** Causym: this learner's end of the stream on {@link #sock}. */
+    CausymQuorum.End causymEnd;
     protected MultipleAddresses leaderAddr;
     protected AtomicBoolean sockBeingClosed = new AtomicBoolean(false);
 
@@ -195,7 +195,7 @@ public class Learner {
      * @throws IOException
      */
     void writePacket(QuorumPacket pp, boolean flush) throws IOException {
-        CausynthQuorum.sent(causynthEnd, pp);
+        CausymQuorum.sent(causymEnd, pp);
         if (asyncSending) {
             sender.queuePacket(pp);
         } else {
@@ -207,7 +207,7 @@ public class Learner {
         synchronized (leaderOs) {
             if (pp != null) {
                 messageTracker.trackSent(pp.getType());
-                CausynthQuorum.written(causynthEnd, pp);
+                CausymQuorum.written(causymEnd, pp);
                 leaderOs.writeRecord(pp, "packet");
             }
             if (flush) {
@@ -234,7 +234,7 @@ public class Learner {
     void readPacket(QuorumPacket pp) throws IOException {
         synchronized (leaderIs) {
             leaderIs.readRecord(pp, "packet");
-            CausynthQuorum.received(causynthEnd, pp);
+            CausymQuorum.received(causymEnd, pp);
             messageTracker.trackReceived(pp.getType());
         }
         if (LOG.isTraceEnabled()) {
@@ -247,7 +247,7 @@ public class Learner {
     }
 
     /**
-     * GraphChecker: a packet of the sync with the leader (every read of
+     * Causym: a packet of the sync with the leader (every read of
      * {@link #syncWithLeader}), one call so the learner stream's fault door
      * sits at each.
      */
@@ -370,7 +370,7 @@ public class Learner {
         leaderIs = BinaryInputArchive.getArchive(new BufferedInputStream(sock.getInputStream()));
         bufferedOutput = new BufferedOutputStream(sock.getOutputStream());
         leaderOs = BinaryOutputArchive.getArchive(bufferedOutput);
-        causynthEnd = CausynthQuorum.learning(self, sock);
+        causymEnd = CausymQuorum.learning(self, sock);
         if (asyncSending) {
             startSendingThread();
         }
@@ -534,7 +534,7 @@ public class Learner {
                 // the -1 indicates that this reply should not count as an ack for the new epoch
                 wrappedEpochBytes.putInt(-1);
             } else {
-                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-07") IOException("Leaders epoch, "
+                throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-07") IOException("Leaders epoch, "
                                       + newEpoch
                                       + " is less than accepted epoch, "
                                       + self.getAcceptedEpoch());
@@ -670,8 +670,8 @@ public class Learner {
                     PacketInFlight pif = new PacketInFlight();
                     logEntry = SerializeUtils.deserializeTxn(qp.getData());
                     pif.hdr = logEntry.getHeader();
-                    // GraphChecker: the header the PROPOSAL carried.
-                    CausynthQuorum.parsedTxn(pif.hdr);
+                    // Causym: the header the PROPOSAL carried.
+                    CausymQuorum.parsedTxn(pif.hdr);
                     pif.rec = logEntry.getTxn();
                     pif.digest = logEntry.getDigest();
                     lastQueued = enforceContinuousProposal(lastQueued, pif);
@@ -733,8 +733,8 @@ public class Learner {
                         logEntry = SerializeUtils.deserializeTxn(qp.getData());
                         packet.rec = logEntry.getTxn();
                         packet.hdr = logEntry.getHeader();
-                        // GraphChecker: the header the INFORM carried.
-                        CausynthQuorum.parsedTxn(packet.hdr);
+                        // Causym: the header the INFORM carried.
+                        CausymQuorum.parsedTxn(packet.hdr);
                         packet.digest = logEntry.getDigest();
                         lastQueued = enforceContinuousProposal(lastQueued, packet);
                     }

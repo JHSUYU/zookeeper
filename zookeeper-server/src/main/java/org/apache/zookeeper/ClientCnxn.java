@@ -289,8 +289,8 @@ public class ClientCnxn {
 
         WatchDeregistration watchDeregistration;
 
-        /** GraphChecker: the request's message, put on the wire once numbered. */
-        CausynthZk.Sent causynth;
+        /** Causym: the request's message, put on the wire once numbered. */
+        CausymZk.Sent causym;
 
         /** Convenience ctor */
         Packet(
@@ -324,8 +324,8 @@ public class ClientCnxn {
                 this.bb = ByteBuffer.wrap(baos.toByteArray());
                 this.bb.putInt(this.bb.capacity() - 4);
                 this.bb.rewind();
-                if (causynth != null) {
-                    causynth.wire(requestHeader.getXid());
+                if (causym != null) {
+                    causym.wire(requestHeader.getXid());
                 }
             } catch (IOException e) {
                 LOG.warn("Unexpected exception", e);
@@ -948,8 +948,8 @@ public class ClientCnxn {
              * Since requests are processed in order, we better get a response
              * to the first request!
              */
-            // GraphChecker: the server's reply to this packet, until it is finished.
-            Object causynth = null;
+            // Causym: the server's reply to this packet, until it is finished.
+            Object causym = null;
             try {
                 if (packet.requestHeader.getXid() != replyHdr.getXid()) {
                     packet.replyHeader.setErr(KeeperException.Code.CONNECTIONLOSS.intValue());
@@ -959,7 +959,7 @@ public class ClientCnxn {
                                           + " for a packet with details: " + packet);
                 }
 
-                causynth = CausynthZk.responded(packet.causynth);
+                causym = CausymZk.responded(packet.causym);
                 packet.replyHeader.setXid(replyHdr.getXid());
                 packet.replyHeader.setErr(replyHdr.getErr());
                 packet.replyHeader.setZxid(replyHdr.getZxid());
@@ -968,13 +968,13 @@ public class ClientCnxn {
                 }
                 if (packet.response != null && replyHdr.getErr() == 0) {
                     packet.response.deserialize(bbia, "response");
-                    CausynthZk.parsed(causynth, packet.response);
+                    CausymZk.parsed(causym, packet.response);
                 }
 
                 LOG.debug("Reading reply session id: 0x{}, packet:: {}", Long.toHexString(sessionId), packet);
             } finally {
                 finishPacket(packet);
-                CausynthZk.handled(causynth);
+                CausymZk.handled(causym);
             }
         }
 
@@ -1022,8 +1022,8 @@ public class ClientCnxn {
             isFirstConnect = false;
             long sessId = (seenRwServerBefore) ? sessionId : 0;
             ConnectRequest conReq = new ConnectRequest(0, lastZxid, sessionTimeout, sessId, sessionPasswd, readOnly);
-            // GraphChecker: the connect request leaves as a message.
-            CausynthZk.connecting(ClientCnxn.this, clientCnxnSocket.getLocalSocketAddress(), conReq);
+            // Causym: the connect request leaves as a message.
+            CausymZk.connecting(ClientCnxn.this, clientCnxnSocket.getLocalSocketAddress(), conReq);
             // We add backwards since we are pushing into the front
             // Only send if there's a pending watch
             if (!clientConfig.getBoolean(ZKClientConfig.DISABLE_AUTO_WATCH_RESET)) {
@@ -1277,8 +1277,8 @@ public class ClientCnxn {
                     }
 
                     // If we are in read-only mode, seek for read/write server
-                    // (GraphChecker: unless a workload holds the search, CausynthZk#holdWritableSeek)
-                    if (state == States.CONNECTEDREADONLY && CausynthZk.seeksWritable(ClientCnxn.this)) {
+                    // (Causym: unless a workload holds the search, CausymZk#holdWritableSeek)
+                    if (state == States.CONNECTEDREADONLY && CausymZk.seeksWritable(ClientCnxn.this)) {
                         long now = Time.currentElapsedTime();
                         int idlePingRwServer = (int) (now - lastPingRwServer);
                         if (idlePingRwServer >= pingRwTimeout) {
@@ -1672,7 +1672,7 @@ public class ClientCnxn {
         packet.clientPath = clientPath;
         packet.serverPath = serverPath;
         packet.watchDeregistration = watchDeregistration;
-        packet.causynth = CausynthZk.request(this, h);
+        packet.causym = CausymZk.request(this, h);
         // The synchronized block here is for two purpose:
         // 1. synchronize with the final cleanup() in SendThread.run() to avoid race
         // 2. synchronized against each packet. So if a closeSession packet is added,

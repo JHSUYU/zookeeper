@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.jmx.MBeanRegistry;
@@ -205,14 +205,14 @@ public class FastLeaderElection implements Election {
     LinkedBlockingQueue<ToSend> sendqueue;
     LinkedBlockingQueue<Notification> recvqueue;
 
-    // GraphChecker: in a workload a looking peer waits for a notification untimed, and is woken to send its own
+    // Causym: in a workload a looking peer waits for a notification untimed, and is woken to send its own
     // again (what the stock timeout does) when its connections or the test's live peers change, or at shutdown.
-    private static final Notification CAUSYNTH_WAKE = new Notification();
-    private volatile boolean causynthLooking;
+    private static final Notification CAUSYM_WAKE = new Notification();
+    private volatile boolean causymLooking;
 
-    public void causynthWake() {
-        if (CausynthNodes.automatic() && (causynthLooking || stop)) {
-            recvqueue.offer(CAUSYNTH_WAKE);
+    public void causymWake() {
+        if (CausymNodes.automatic() && (causymLooking || stop)) {
+            recvqueue.offer(CAUSYM_WAKE);
         }
     }
 
@@ -247,7 +247,7 @@ public class FastLeaderElection implements Election {
                 while (!stop) {
                     // Sleeps on receive
                     try {
-                        // GraphChecker: an idle receiver wakes only for a message.
+                        // Causym: an idle receiver wakes only for a message.
                         response = manager.nextRecv(3000);
                         if (response == null) {
                             continue;
@@ -507,8 +507,8 @@ public class FastLeaderElection implements Election {
             public void run() {
                 while (!stop) {
                     try {
-                        // GraphChecker: an idle sender wakes only for a message.
-                        ToSend m = CausynthNodes.next(sendqueue, 3000);
+                        // Causym: an idle sender wakes only for a message.
+                        ToSend m = CausymNodes.next(sendqueue, 3000);
                         if (m == null) {
                             continue;
                         }
@@ -566,8 +566,8 @@ public class FastLeaderElection implements Election {
         void halt() {
             this.ws.stop = true;
             this.wr.stop = true;
-            // GraphChecker: in a workload an idle worker waits for a message alone, so the stop wakes it.
-            if (CausynthNodes.automatic()) {
+            // Causym: in a workload an idle worker waits for a message alone, so the stop wakes it.
+            if (CausymNodes.automatic()) {
                 this.ws.interrupt();
                 this.wr.interrupt();
             }
@@ -688,7 +688,7 @@ public class FastLeaderElection implements Election {
     volatile boolean stop;
     public void shutdown() {
         stop = true;
-        causynthWake();
+        causymWake();
         proposedLeader = -1;
         proposedZxid = -1;
         leadingVoteSet = null;
@@ -934,7 +934,7 @@ public class FastLeaderElection implements Election {
         }
 
         self.start_fle = Time.currentElapsedTime();
-        causynthLooking = true;
+        causymLooking = true;
         try {
             /*
              * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
@@ -976,9 +976,9 @@ public class FastLeaderElection implements Election {
                  * Remove next notification from queue, times out after 2 times
                  * the termination time
                  */
-                Notification n = CausynthNodes.automatic()
+                Notification n = CausymNodes.automatic()
                     ? recvqueue.take() : recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
-                if (n == CAUSYNTH_WAKE) {
+                if (n == CAUSYM_WAKE) {
                     n = null;
                 }
 
@@ -1063,17 +1063,17 @@ public class FastLeaderElection implements Election {
 
                         voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
 
-                        // GraphChecker: in a workload, every peer the test runs votes, so one
+                        // Causym: in a workload, every peer the test runs votes, so one
                         // leader is elected in every run.
                         if (voteSet.hasAllQuorums()
-                            && CausynthNodes.everyLivePeerVoted(self.getVotingView().keySet(), recvset.keySet())) {
+                            && CausymNodes.everyLivePeerVoted(self.getVotingView().keySet(), recvset.keySet())) {
 
                             // Verify if there is any change in the proposed leader
-                            // GraphChecker: in a workload every live peer has voted: only a vote already
+                            // Causym: in a workload every live peer has voted: only a vote already
                             // queued may still change the leader, so no wait.
-                            while ((n = CausynthNodes.automatic() ? recvqueue.poll()
+                            while ((n = CausymNodes.automatic() ? recvqueue.poll()
                                 : recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
-                                if (n == CAUSYNTH_WAKE) {
+                                if (n == CAUSYM_WAKE) {
                                     continue;
                                 }
                                 if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
@@ -1159,7 +1159,7 @@ public class FastLeaderElection implements Election {
             }
             return null;
         } finally {
-            causynthLooking = false;
+            causymLooking = false;
             try {
                 if (self.jmxLeaderElectionBean != null) {
                     MBeanRegistry.getInstance().unregister(self.jmxLeaderElectionBean);
