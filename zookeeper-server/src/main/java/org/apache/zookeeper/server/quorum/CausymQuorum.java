@@ -18,7 +18,7 @@
 
 package org.apache.zookeeper.server.quorum;
 
-import edu.uva.liftlab.graphchecker.runtime.MessageDoors;
+import edu.uva.liftlab.causym.runtime.MessageDoors;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.net.Socket;
@@ -28,15 +28,15 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.apache.zookeeper.CausynthZk;
+import org.apache.zookeeper.CausymZk;
 import org.apache.zookeeper.server.Request;
 import org.apache.zookeeper.txn.TxnHeader;
 
 /**
- * GraphChecker: the learner stream, leader (or observer master) and
- * learner, on GraphChecker's message doors, in a JVM that is a GraphChecker
- * workload ({@link CausynthZk#automatic}); anywhere else it does nothing and
- * GraphChecker is never loaded.
+ * Causym: the learner stream, leader (or observer master) and
+ * learner, on Causym's message doors, in a JVM that is a Causym
+ * workload ({@link CausymZk#automatic}); anywhere else it does nothing and
+ * Causym is never loaded.
  *
  * <p>Every {@link QuorumPacket} is one message ({@link #TRANSPORT}, half
  * {@code REQUEST}, its verb the packet's type), owned by the QuorumPeer of
@@ -66,7 +66,7 @@ import org.apache.zookeeper.txn.TxnHeader;
  * left there is overwritten before a link on the same port could read
  * it.</p>
  */
-public final class CausynthQuorum {
+public final class CausymQuorum {
 
     /** The transport of the learner stream's packets, and of its fault door. */
     public static final String TRANSPORT = "ZK_QUORUM";
@@ -84,17 +84,17 @@ public final class CausynthQuorum {
     /** The txn packets made here, with the header each carries: its txn's zxid is the sender's. */
     private static final Txns TXNS = new Txns();
 
-    private CausynthQuorum() {
+    private CausymQuorum() {
     }
 
     /** The learner's end of the stream it opened on {@code sock}, or null outside a workload. */
     static End learning(QuorumPeer peer, Socket sock) {
-        return CausynthZk.automatic() ? new End(peer, sock.getLocalPort(), TO_LEADER, TO_LEARNER) : null;
+        return CausymZk.automatic() ? new End(peer, sock.getLocalPort(), TO_LEADER, TO_LEARNER) : null;
     }
 
     /** The leader's (or observer master's) end of the stream a learner opened to it on {@code sock}. */
     static End leading(QuorumPeer peer, Socket sock) {
-        return CausynthZk.automatic() ? new End(peer, sock.getPort(), TO_LEARNER, TO_LEADER) : null;
+        return CausymZk.automatic() ? new End(peer, sock.getPort(), TO_LEARNER, TO_LEADER) : null;
     }
 
     /** The producer hands {@code packet} to the stream: its message leaves, in the producer's context. */
@@ -157,7 +157,7 @@ public final class CausynthQuorum {
      * @return the served exchange, or null outside a workload
      */
     static Object ackingItself(QuorumPeer leader, long zxid) {
-        if (!CausynthZk.automatic()) {
+        if (!CausymZk.automatic()) {
             return null;
         }
         String correlation = "zkq-ack-" + leader.getMyId() + "-" + Long.toHexString(zxid);
@@ -176,7 +176,7 @@ public final class CausynthQuorum {
 
     /** The thread that read the stream is done with it: the last packet it read is served no longer. */
     static void left() {
-        if (CausynthZk.automatic()) {
+        if (CausymZk.automatic()) {
             SERVED.remove();
             PARSED.remove();
             MessageDoors.endInbound();
@@ -190,8 +190,8 @@ public final class CausynthQuorum {
      * #servingLogged}), whatever request the batching log thread took last.
      */
     static void logging(Request request) {
-        if (CausynthZk.automatic() && request != null) {
-            request.causynthLogged = SERVED.get();
+        if (CausymZk.automatic() && request != null) {
+            request.causymLogged = SERVED.get();
         }
     }
 
@@ -201,14 +201,14 @@ public final class CausynthQuorum {
      * leaves under.
      */
     static void proposing(QuorumPeer leader, Request request) {
-        if (!CausynthZk.automatic() || leader == null || request == null) {
+        if (!CausymZk.automatic() || leader == null || request == null) {
             return;
         }
         String correlation = "zkq-proposal-" + leader.getMyId() + "-" + Long.toHexString(request.zxid);
         MessageDoors.Outbound sent = MessageDoors.outboundRequest(TRANSPORT, correlation, ATTEMPT, leader, null,
             Leader.getPacketType(Leader.PROPOSAL), null);
         if (sent.active()) {
-            request.causynthLogged = sent;
+            request.causymLogged = sent;
         }
     }
 
@@ -219,7 +219,7 @@ public final class CausynthQuorum {
      * @return the served exchange, or null
      */
     static Object servingLogged(QuorumPeer peer, Request request) {
-        Object logged = request == null ? null : request.causynthLogged;
+        Object logged = request == null ? null : request.causymLogged;
         if (!(logged instanceof MessageDoors.Outbound)) {
             return null;
         }
@@ -235,7 +235,7 @@ public final class CausynthQuorum {
      * the packet takes them ({@link #parsedTxn}).
      */
     static void carrying(QuorumPacket packet, TxnHeader header) {
-        if (CausynthZk.automatic() && packet != null && header != null) {
+        if (CausymZk.automatic() && packet != null && header != null) {
             TXNS.put(packet, header);
         }
     }
@@ -247,7 +247,7 @@ public final class CausynthQuorum {
      * automatic.
      */
     static TxnHeader copyOf(TxnHeader header) {
-        if (!CausynthZk.automatic() || header == null) {
+        if (!CausymZk.automatic() || header == null) {
             return null;
         }
         TxnHeader copy = new TxnHeader();
@@ -265,7 +265,7 @@ public final class CausynthQuorum {
      * served packet (a log's replay at startup), nothing.
      */
     static void parsedTxn(TxnHeader header) {
-        if (!CausynthZk.automatic() || header == null || SERVED.get() == null) {
+        if (!CausymZk.automatic() || header == null || SERVED.get() == null) {
             return;
         }
         PARSED.set(header);
@@ -274,7 +274,7 @@ public final class CausynthQuorum {
 
     /** The txn header this thread last took from a packet it served, or null. */
     static TxnHeader parsedHeader() {
-        return CausynthZk.automatic() ? PARSED.get() : null;
+        return CausymZk.automatic() ? PARSED.get() : null;
     }
 
     /** The txn packets and their headers, by packet identity, held no longer than the packet. */

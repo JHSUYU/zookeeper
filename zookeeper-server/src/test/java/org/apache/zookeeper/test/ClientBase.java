@@ -41,7 +41,7 @@ import java.util.concurrent.TimeoutException;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.net.ssl.SSLContext;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.TestableZooKeeper;
@@ -232,8 +232,8 @@ public abstract class ClientBase extends ZKTestCase {
                 zk.close();
             }
         }
-        if (CausynthZkCluster.automatic()) {
-            CausynthNodes.openWindow(zk);
+        if (CausymZkCluster.automatic()) {
+            CausymNodes.openWindow(zk);
         }
 
         return zk;
@@ -434,15 +434,15 @@ public abstract class ClientBase extends ZKTestCase {
         LOG.info("STARTING server instance 127.0.0.1:{}", port);
         ZooKeeperServer zks = new ZooKeeperServer(dataDir, dataDir, 3000);
         zks.setCreateSessionTrackerServerId(serverId);
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.configure(zks);
+        if (CausymZkCluster.automatic()) {
+            CausymZkCluster.configure(zks);
         }
         factory.startup(zks);
         assertTrue(
             ClientBase.waitForServerUp("127.0.0.1:" + port, CONNECTION_TIMEOUT, factory.isSecure(), zkConfig),
             "waiting for server up");
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.registerServer(zks);
+        if (CausymZkCluster.automatic()) {
+            CausymZkCluster.registerServer(zks);
         }
     }
 
@@ -626,7 +626,7 @@ public abstract class ClientBase extends ZKTestCase {
     @AfterEach
     public void tearDown() throws Exception {
         LOG.info("tearDown starting");
-        CausynthNodes.endTest();
+        CausymNodes.endTest();
 
         tearDownAll();
 

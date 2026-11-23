@@ -38,16 +38,16 @@ import org.apache.zookeeper.server.quorum.QuorumPeerTestBase.TestQPMain;
 import org.apache.zookeeper.txn.CreateTxn;
 
 /**
- * The holds of the GraphChecker quorum workloads (CausynthTruncSyncTest, CausynthObserverMasterSyncTest), in the shape
+ * The holds of the Causym quorum workloads (CausymTruncSyncTest, CausymObserverMasterSyncTest), in the shape
  * of ObserverMasterPendingProposalTest (apache/zookeeper PR 2454): a participant's leader is a {@link HeldLeader} that
  * can hold the ACKs of one create and pause one follower's startForwarding. A hold only makes an order controllable:
  * every proposal, commit, queue and zxid is the normal protocol's, and every override waits before it calls the
  * synchronized super, so no lock is held while waiting. The test waits on what the leader sees, not by polling: a
  * learner's ACK of the tracked create (it logged it) and its ACK of UPTODATE (it synced, or its life ended first).
- * Holds and waits are bounded by {@link #WAIT_SECONDS}, far above a native run's seconds: a GraphChecker replay runs
+ * Holds and waits are bounded by {@link #WAIT_SECONDS}, far above a native run's seconds: a Causym replay runs
  * many times slower than its recording, and a native hang is still bounded by the test's own timeout.
  */
-public class CausynthQuorumHarness {
+public class CausymQuorumHarness {
 
     static final long WAIT_SECONDS = 300;
 

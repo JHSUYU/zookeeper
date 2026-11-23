@@ -70,8 +70,8 @@ public final class PortAssignment {
                 System.getProperty("test.junit.threads"),
                 threadId != null ? "threadid=" + threadId : System.getProperty("sun.java.command"));
             nextPort = portRange.getMinimum();
-            if (CausynthZk.automatic()) {
-                // GraphChecker: the replays of one case share a host, so each
+            if (CausymZk.automatic()) {
+                // Causym: the replays of one case share a host, so each
                 // starts at the free port the system gives it, and every later
                 // port is above the one before: the ports are in the order the
                 // test asks for them in every run.

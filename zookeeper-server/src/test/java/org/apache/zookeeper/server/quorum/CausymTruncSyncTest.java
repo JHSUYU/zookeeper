@@ -18,7 +18,7 @@
 
 package org.apache.zookeeper.server.quorum;
 
-import static org.apache.zookeeper.server.quorum.CausynthQuorumHarness.await;
+import static org.apache.zookeeper.server.quorum.CausymQuorumHarness.await;
 import static org.apache.zookeeper.test.ClientBase.CONNECTION_TIMEOUT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,7 +38,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * GraphChecker workload of ZOOKEEPER-5094 (apache/zookeeper PR 2459). A follower F logs a create that its leader has
+ * Causym workload of ZOOKEEPER-5094 (apache/zookeeper PR 2459). A follower F logs a create that its leader has
  * not committed, restarts, and is told to TRUNC; the create commits while F's sync is between TRUNC and NEWLEADER, so
  * the leader sends it as PROPOSAL+COMMIT before NEWLEADER and F applies it in memory only. NEWLEADER's snapshot covers
  * it. Then, in the same life, F logs a second create its leader has not committed and loses its leader: the leader
@@ -47,11 +47,11 @@ import org.junit.jupiter.api.Timeout;
  * with the zxid its memory holds), and the second TRUNC's reload throws at ZKDatabase.addCommittedProposal: F never
  * follows again.
  */
-public class CausynthTruncSyncTest extends QuorumPeerTestBase {
+public class CausymTruncSyncTest extends QuorumPeerTestBase {
 
     private static final int PARTICIPANTS = 3;
 
-    private final CausynthQuorumHarness harness = new CausynthQuorumHarness();
+    private final CausymQuorumHarness harness = new CausymQuorumHarness();
     private final MainThread[] peers = new MainThread[PARTICIPANTS + 1];
     private final int[] clientPorts = new int[PARTICIPANTS + 1];
 
@@ -108,7 +108,7 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         harness.releaseAcks();
         harness.awaitCommitted();
         harness.releaseForwarding();
-        assertTrue(aheadDone.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+        assertTrue(aheadDone.await(CausymQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
             "the held create did not finish");
         assertEquals(Code.OK.intValue(), aheadRc.get());
         harness.awaitSync(follower, peers[follower]);
@@ -144,7 +144,7 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         harness.releaseAcks();
         harness.awaitCommitted();
         harness.releaseForwarding();
-        assertTrue(ahead2Done.await(CausynthQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
+        assertTrue(ahead2Done.await(CausymQuorumHarness.WAIT_SECONDS, TimeUnit.SECONDS),
             "the second held create did not finish");
         assertEquals(Code.OK.intValue(), ahead2Rc.get());
         harness.awaitSync(follower, peers[follower]);
@@ -154,7 +154,7 @@ public class CausynthTruncSyncTest extends QuorumPeerTestBase {
         // F's life (its peer's run, where both syncs ran) ends inside the test: a recorded window closes before
         // tear-down stops it.
         peers[follower].shutdown();
-        peers[follower].join(TimeUnit.SECONDS.toMillis(CausynthQuorumHarness.WAIT_SECONDS));
+        peers[follower].join(TimeUnit.SECONDS.toMillis(CausymQuorumHarness.WAIT_SECONDS));
     }
 
     /** Server {@code sid} loses its leader without stopping: its follower ends and its peer elects and syncs again. */

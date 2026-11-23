@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.security.sasl.SaslException;
 import org.apache.yetus.audience.InterfaceAudience;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.KeeperException.BadArgumentsException;
 import org.apache.zookeeper.common.AtomicFileOutputStream;
 import org.apache.zookeeper.common.AtomicFileWritingIdiom;
@@ -1192,8 +1192,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (!getView().containsKey(myid)) {
             throw new RuntimeException("My id " + myid + " not in the peer list");
         }
-        // GraphChecker: the peer's node, at this life; the start is its own.
-        Object causynth = CausynthNodes.starting(this, zkDb, zkDb.getDataTree(), getTxnFactory(),
+        // Causym: the peer's node, at this life; the start is its own.
+        Object causym = CausymNodes.starting(this, zkDb, zkDb.getDataTree(), getTxnFactory(),
             cnxnFactory, secureCnxnFactory);
         boolean started = false;
         try {
@@ -1209,7 +1209,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
             super.start();
             started = true;
         } finally {
-            CausynthNodes.started(causynth, this, started);
+            CausymNodes.started(causym, this, started);
         }
     }
 
@@ -1243,7 +1243,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                     LOG.info("{} found. Setting current epoch to {}.", currentTmp, epochOfTmp);
                     setCurrentEpoch(epochOfTmp);
                 } else {
-                    throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-11") IOException(
+                    throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-11") IOException(
                         "The current epoch, " + ZxidUtils.zxidToString(currentEpoch)
                             + ", is older than the last zxid, " + lastProcessedZxid);
                 }
@@ -1263,7 +1263,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
                 writeLongToFile(ACCEPTED_EPOCH_FILENAME, acceptedEpoch);
             }
             if (acceptedEpoch < currentEpoch) {
-                throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-12") IOException("The accepted epoch, "
+                throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-12") IOException("The accepted epoch, "
                                       + ZxidUtils.zxidToString(acceptedEpoch)
                                       + " is less than the current epoch, "
                                       + ZxidUtils.zxidToString(currentEpoch));
@@ -1479,22 +1479,22 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     boolean shuttingDownLE = false;
 
-    // GraphChecker: in a workload a suspended peer waits for setSuspended, not on 10 ms sleeps.
-    private final Object causynthSuspendLock = new Object();
+    // Causym: in a workload a suspended peer waits for setSuspended, not on 10 ms sleeps.
+    private final Object causymSuspendLock = new Object();
 
     public void setSuspended(boolean suspended) {
         this.suspended.set(suspended);
-        synchronized (causynthSuspendLock) {
-            causynthSuspendLock.notifyAll();
+        synchronized (causymSuspendLock) {
+            causymSuspendLock.notifyAll();
         }
     }
     private void checkSuspended() {
         try {
             while (suspended.get()) {
-                if (CausynthNodes.automatic()) {
-                    synchronized (causynthSuspendLock) {
+                if (CausymNodes.automatic()) {
+                    synchronized (causymSuspendLock) {
                         if (suspended.get()) {
-                            causynthSuspendLock.wait();
+                            causymSuspendLock.wait();
                         }
                     }
                 } else {
@@ -1508,8 +1508,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 
     @Override
     public void run() {
-        // GraphChecker: what the peer's thread starts is the peer's.
-        CausynthNodes.running(this);
+        // Causym: what the peer's thread starts is the peer's.
+        CausymNodes.running(this);
         updateThreadName();
 
         LOG.debug("Starting quorum peer");
@@ -1705,8 +1705,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
     }
 
     public void shutdown() {
-        // GraphChecker: the test shut the peer down.
-        CausynthNodes.down(this);
+        // Causym: the test shut the peer down.
+        CausymNodes.down(this);
         running = false;
         x509Util.close();
         if (leader != null) {
@@ -1715,9 +1715,9 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
         if (follower != null) {
             follower.shutdown();
         }
-        // GraphChecker: in a workload an observer's read waits NEVER_MS and no master pings it
+        // Causym: in a workload an observer's read waits NEVER_MS and no master pings it
         // awake, so its shutdown closes its stream, as a follower's does.
-        if (observer != null && CausynthNodes.automatic()) {
+        if (observer != null && CausymNodes.automatic()) {
             observer.shutdown();
         }
         shutdownServerCnxnFactory();

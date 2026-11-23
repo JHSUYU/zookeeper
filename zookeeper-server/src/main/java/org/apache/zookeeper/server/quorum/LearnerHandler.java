@@ -78,8 +78,8 @@ public class LearnerHandler extends ZooKeeperThread {
 
     protected final Socket sock;
 
-    /** GraphChecker: the leader's (or observer master's) end of the stream on {@link #sock}. */
-    CausynthQuorum.End causynthEnd;
+    /** Causym: the leader's (or observer master's) end of the stream on {@link #sock}. */
+    CausymQuorum.End causymEnd;
 
     public Socket getSocket() {
         return sock;
@@ -369,7 +369,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 if (p.getZxid() > 0) {
                     lastZxid = p.getZxid();
                 }
-                CausynthQuorum.written(causynthEnd, p);
+                CausymQuorum.written(causymEnd, p);
                 oa.writeRecord(p, "packet");
                 packetsSent.incrementAndGet();
                 messageTracker.trackSent(p.getType());
@@ -475,7 +475,7 @@ public class LearnerHandler extends ZooKeeperThread {
 
             QuorumPacket qp = new QuorumPacket();
             ia.readRecord(qp, "packet");
-            CausynthQuorum.received(causynthEnd, qp);
+            CausymQuorum.received(causymEnd, qp);
 
             messageTracker.trackReceived(qp.getType());
             if (qp.getType() != Leader.FOLLOWERINFO && qp.getType() != Leader.OBSERVERINFO) {
@@ -540,13 +540,13 @@ public class LearnerHandler extends ZooKeeperThread {
                 byte[] ver = new byte[4];
                 ByteBuffer.wrap(ver).putInt(0x10000);
                 QuorumPacket newEpochPacket = new QuorumPacket(Leader.LEADERINFO, newLeaderZxid, ver, null);
-                CausynthQuorum.written(causynthEnd, newEpochPacket);
+                CausymQuorum.written(causymEnd, newEpochPacket);
                 oa.writeRecord(newEpochPacket, "packet");
                 messageTracker.trackSent(Leader.LEADERINFO);
                 bufferedOutput.flush();
                 QuorumPacket ackEpochPacket = new QuorumPacket();
                 ia.readRecord(ackEpochPacket, "packet");
-                CausynthQuorum.received(causynthEnd, ackEpochPacket);
+                CausymQuorum.received(causymEnd, ackEpochPacket);
                 messageTracker.trackReceived(ackEpochPacket.getType());
                 if (ackEpochPacket.getType() != Leader.ACKEPOCH) {
                     LOG.error("{} is not ACKEPOCH", ackEpochPacket.toString());
@@ -574,7 +574,7 @@ public class LearnerHandler extends ZooKeeperThread {
                 try {
                     long zxidToSend = learnerMaster.getZKDatabase().getDataTreeLastProcessedZxid();
                     QuorumPacket snapPacket = new QuorumPacket(Leader.SNAP, zxidToSend, null, null);
-                    CausynthQuorum.written(causynthEnd, snapPacket);
+                    CausymQuorum.written(causymEnd, snapPacket);
                     oa.writeRecord(snapPacket, "packet");
                     messageTracker.trackSent(Leader.SNAP);
                     bufferedOutput.flush();
@@ -608,11 +608,11 @@ public class LearnerHandler extends ZooKeeperThread {
             // we got here, so the version was set
             if (getVersion() < 0x10000) {
                 QuorumPacket newLeaderQP = new QuorumPacket(Leader.NEWLEADER, newLeaderZxid, null, null);
-                CausynthQuorum.written(causynthEnd, newLeaderQP);
+                CausymQuorum.written(causymEnd, newLeaderQP);
                 oa.writeRecord(newLeaderQP, "packet");
             } else {
                 QuorumPacket newLeaderQP = new QuorumPacket(Leader.NEWLEADER, newLeaderZxid, learnerMaster.getQuorumVerifierBytes(), null);
-                CausynthQuorum.sent(causynthEnd, newLeaderQP);
+                CausymQuorum.sent(causymEnd, newLeaderQP);
                 queuedPackets.add(newLeaderQP);
             }
             bufferedOutput.flush();
@@ -627,7 +627,7 @@ public class LearnerHandler extends ZooKeeperThread {
              */
             qp = new QuorumPacket();
             ia.readRecord(qp, "packet");
-            CausynthQuorum.received(causynthEnd, qp);
+            CausymQuorum.received(causymEnd, qp);
 
             messageTracker.trackReceived(qp.getType());
             if (qp.getType() != Leader.ACK) {
@@ -663,13 +663,13 @@ public class LearnerHandler extends ZooKeeperThread {
             //
             LOG.debug("Sending UPTODATE message to {}", sid);
             QuorumPacket upToDate = new QuorumPacket(Leader.UPTODATE, -1, null, null);
-            CausynthQuorum.sent(causynthEnd, upToDate);
+            CausymQuorum.sent(causymEnd, upToDate);
             queuedPackets.add(upToDate);
 
             while (true) {
                 qp = new QuorumPacket();
                 ia.readRecord(qp, "packet");
-                CausynthQuorum.received(causynthEnd, qp);
+                CausymQuorum.received(causymEnd, qp);
                 messageTracker.trackReceived(qp.getType());
 
                 if (LOG.isTraceEnabled()) {
@@ -743,7 +743,7 @@ public class LearnerHandler extends ZooKeeperThread {
             LOG.error("Unexpected exception in LearnerHandler.", e);
             throw e;
         } finally {
-            CausynthQuorum.left();
+            CausymQuorum.left();
             if (syncThrottler != null) {
                 syncThrottler.endSync();
                 syncThrottler = null;
@@ -1108,7 +1108,7 @@ public class LearnerHandler extends ZooKeeperThread {
     }
 
     void queuePacket(QuorumPacket p) {
-        CausynthQuorum.sent(causynthEnd, p);
+        CausymQuorum.sent(causymEnd, p);
         queuedPackets.add(p);
         // Add a MarkerQuorumPacket at regular intervals.
         if (shouldSendMarkerPacketForLogging() && packetCounter.getAndIncrement() % markerPacketInterval == 0) {
