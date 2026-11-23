@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import javax.security.sasl.SaslException;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.OpCode;
 import org.apache.zookeeper.common.Time;
@@ -134,8 +134,8 @@ public class Leader extends LearnerMaster {
         public QuorumPacket getQuorumPacket() {
             byte[] data = request.getSerializeData();
             QuorumPacket packet = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
-            // GraphChecker: the packet carries a copy of its txn's header, made by this send.
-            CausynthQuorum.carrying(packet, CausynthQuorum.copyOf(request.getHdr()));
+            // Causym: the packet carries a copy of its txn's header, made by this send.
+            CausymQuorum.carrying(packet, CausymQuorum.copyOf(request.getHdr()));
             return packet;
         }
 
@@ -194,8 +194,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getLearners() {
         synchronized (learners) {
-            // GraphChecker: in a workload, by server id.
-            return CausynthNodes.bySid(learners, LearnerHandler::getSid);
+            // Causym: in a workload, by server id.
+            return CausymNodes.bySid(learners, LearnerHandler::getSid);
         }
     }
 
@@ -207,8 +207,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getForwardingFollowers() {
         synchronized (forwardingFollowers) {
-            // GraphChecker: in a workload, by server id.
-            return CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid);
+            // Causym: in a workload, by server id.
+            return CausymNodes.bySid(forwardingFollowers, LearnerHandler::getSid);
         }
     }
 
@@ -241,8 +241,8 @@ public class Leader extends LearnerMaster {
      */
     public List<LearnerHandler> getObservingLearners() {
         synchronized (observingLearners) {
-            // GraphChecker: in a workload, by server id.
-            return CausynthNodes.bySid(observingLearners, LearnerHandler::getSid);
+            // Causym: in a workload, by server id.
+            return CausymNodes.bySid(observingLearners, LearnerHandler::getSid);
         }
     }
 
@@ -291,51 +291,51 @@ public class Leader extends LearnerMaster {
         synchronized (learners) {
             learners.add(learner);
         }
-        causynthTick();
+        causymTick();
     }
 
     /**
-     * GraphChecker: in a workload, the times the leader's quorum may have changed, and those it
+     * Causym: in a workload, the times the leader's quorum may have changed, and those it
      * ticked for, under a lock of their own that holds no other (callers hold the learner sets).
      */
-    private final Object causynthTickLock = new Object();
-    private long causynthTicks;
-    private long causynthTicked;
+    private final Object causymTickLock = new Object();
+    private long causymTicks;
+    private long causymTicked;
 
-    /** GraphChecker: in a workload the leader's quorum may have changed: it ticks now. */
-    private void causynthTick() {
-        if (CausynthNodes.automatic()) {
-            synchronized (causynthTickLock) {
-                causynthTicks++;
-                causynthTickLock.notifyAll();
+    /** Causym: in a workload the leader's quorum may have changed: it ticks now. */
+    private void causymTick() {
+        if (CausymNodes.automatic()) {
+            synchronized (causymTickLock) {
+                causymTicks++;
+                causymTickLock.notifyAll();
             }
         }
     }
 
     /**
-     * GraphChecker: in a workload the leader processes its ACKs -- a learner's, handed over on its handler, and its
+     * Causym: in a workload the leader processes its ACKs -- a learner's, handed over on its handler, and its
      * own, on its log's thread -- on one thread of its own in the order they were handed over (a queue the schedule
      * takes in the recording's order), so the ACK that completes a quorum, under which the COMMIT leaves, is the
      * recorded one.
      */
-    private final LinkedBlockingQueue<CausynthAck> causynthAcks = new LinkedBlockingQueue<>();
-    private volatile Thread causynthAcker;
+    private final LinkedBlockingQueue<CausymAck> causymAcks = new LinkedBlockingQueue<>();
+    private volatile Thread causymAcker;
 
-    private static final class CausynthAck {
+    private static final class CausymAck {
         private final long sid;
         private final long zxid;
         private final SocketAddress from;
 
-        private CausynthAck(long sid, long zxid, SocketAddress from) {
+        private CausymAck(long sid, long zxid, SocketAddress from) {
             this.sid = sid;
             this.zxid = zxid;
             this.from = from;
         }
     }
 
-    /** GraphChecker: in a workload the leader's ACK thread starts. */
-    private void causynthStartAcker() {
-        if (!CausynthNodes.automatic()) {
+    /** Causym: in a workload the leader's ACK thread starts. */
+    private void causymStartAcker() {
+        if (!CausymNodes.automatic()) {
             return;
         }
         Thread acker = new ZooKeeperThread("LeaderAcks:" + self.getMyId()) {
@@ -343,7 +343,7 @@ public class Leader extends LearnerMaster {
             public void run() {
                 try {
                     while (true) {
-                        CausynthAck ack = causynthAcks.take();
+                        CausymAck ack = causymAcks.take();
                         processAck(ack.sid, ack.zxid, ack.from);
                     }
                 } catch (InterruptedException stopped) {
@@ -352,17 +352,17 @@ public class Leader extends LearnerMaster {
             }
         };
         acker.setDaemon(true);
-        causynthAcker = acker;
+        causymAcker = acker;
         acker.start();
     }
 
-    /** GraphChecker: in a workload the leader waits, holding none of its locks, for a reason to tick. */
-    private void causynthAwaitTick() throws InterruptedException {
-        synchronized (causynthTickLock) {
-            while (causynthTicked == causynthTicks) {
-                causynthTickLock.wait();
+    /** Causym: in a workload the leader waits, holding none of its locks, for a reason to tick. */
+    private void causymAwaitTick() throws InterruptedException {
+        synchronized (causymTickLock) {
+            while (causymTicked == causymTicks) {
+                causymTickLock.wait();
             }
-            causynthTicked = causynthTicks;
+            causymTicked = causymTicks;
         }
     }
 
@@ -382,7 +382,7 @@ public class Leader extends LearnerMaster {
         synchronized (observingLearners) {
             observingLearners.remove(peer);
         }
-        causynthTick();
+        causymTick();
     }
 
     boolean isLearnerSynced(LearnerHandler peer) {
@@ -655,7 +655,7 @@ public class Leader extends LearnerMaster {
 
                     BufferedInputStream is = new BufferedInputStream(socket.getInputStream());
                     LearnerHandler fh = new LearnerHandler(socket, is, Leader.this);
-                    fh.causynthEnd = CausynthQuorum.leading(self, socket);
+                    fh.causymEnd = CausymQuorum.leading(self, socket);
                     fh.start();
                 } catch (SocketException e) {
                     error = true;
@@ -723,7 +723,7 @@ public class Leader extends LearnerMaster {
         self.end_fle = 0;
 
         zk.registerJMX(new LeaderBean(this, zk), self.jmxLocalPeerBean);
-        causynthStartAcker();
+        causymStartAcker();
 
         try {
             self.setZabState(QuorumPeer.ZabState.DISCOVERY);
@@ -857,20 +857,20 @@ public class Leader extends LearnerMaster {
             String shutdownMessage = null;
 
             while (true) {
-                if (CausynthNodes.automatic()) {
-                    causynthAwaitTick();
+                if (CausymNodes.automatic()) {
+                    causymAwaitTick();
                 }
                 synchronized (this) {
                     long start = Time.currentElapsedTime();
                     long cur = start;
                     long end = start + self.tickTime / 2;
-                    if (CausynthNodes.automatic()) {
-                        // GraphChecker: in a workload the leader ticks when its quorum may
-                        // change (a learner joins or leaves, a shutdown: causynthAwaitTick above),
+                    if (CausymNodes.automatic()) {
+                        // Causym: in a workload the leader ticks when its quorum may
+                        // change (a learner joins or leaves, a shutdown: causymAwaitTick above),
                         // each wake a whole tick: a slower replay ticks no more often than its recording.
                         tickSkip = false;
                     }
-                    while (cur < end && !CausynthNodes.automatic()) {
+                    while (cur < end && !CausymNodes.automatic()) {
                         wait(end - cur);
                         cur = Time.currentElapsedTime();
                     }
@@ -960,8 +960,8 @@ public class Leader extends LearnerMaster {
         }
 
         LOG.info("Shutdown called. For the reason {}", reason);
-        causynthTick();
-        Thread acker = causynthAcker;
+        causymTick();
+        Thread acker = causymAcker;
         if (acker != null) {
             acker.interrupt();
         }
@@ -1151,9 +1151,9 @@ public class Leader extends LearnerMaster {
      */
     @Override
     public synchronized void processAck(long sid, long zxid, SocketAddress followerAddr) {
-        Thread acker = causynthAcker;
+        Thread acker = causymAcker;
         if (acker != null && Thread.currentThread() != acker) {
-            causynthAcks.add(new CausynthAck(sid, zxid, followerAddr));
+            causymAcks.add(new CausymAck(sid, zxid, followerAddr));
             return;
         }
         if (!allowedToCommit) {
@@ -1298,8 +1298,8 @@ public class Leader extends LearnerMaster {
      */
     void sendPacket(QuorumPacket qp) {
         synchronized (forwardingFollowers) {
-            // GraphChecker: in a workload, the followers in server id order.
-            for (LearnerHandler f : CausynthNodes.bySid(forwardingFollowers, LearnerHandler::getSid)) {
+            // Causym: in a workload, the followers in server id order.
+            for (LearnerHandler f : CausymNodes.bySid(forwardingFollowers, LearnerHandler::getSid)) {
                 f.queuePacket(qp);
             }
         }
@@ -1349,8 +1349,8 @@ public class Leader extends LearnerMaster {
      */
     public void inform(Proposal proposal) {
         QuorumPacket qp = new QuorumPacket(Leader.INFORM, proposal.request.zxid, proposal.packet.getData(), null);
-        // GraphChecker: the packet carries its txn's header.
-        CausynthQuorum.carrying(qp, proposal.request.getHdr());
+        // Causym: the packet carries its txn's header.
+        CausymQuorum.carrying(qp, proposal.request.getHdr());
         sendObserverPacket(qp);
     }
 
@@ -1417,8 +1417,8 @@ public class Leader extends LearnerMaster {
         byte[] data = request.getSerializeData();
         proposalStats.setLastBufferSize(data.length);
         QuorumPacket pp = new QuorumPacket(Leader.PROPOSAL, request.zxid, data, null);
-        // GraphChecker: the packet carries its txn's header.
-        CausynthQuorum.carrying(pp, request.getHdr());
+        // Causym: the packet carries its txn's header.
+        CausymQuorum.carrying(pp, request.getHdr());
 
         Proposal p = new Proposal(request, pp);
 
@@ -1512,9 +1512,9 @@ public class Leader extends LearnerMaster {
     public void waitForStartup() throws InterruptedException {
         synchronized (zk) {
             while (!zk.isRunning() && !Thread.currentThread().isInterrupted()) {
-                // GraphChecker: in a workload a handler waits for the server's start alone (startup
+                // Causym: in a workload a handler waits for the server's start alone (startup
                 // notifies; a handler's shutdown interrupts it), not in 20 ms polls.
-                if (CausynthNodes.automatic()) {
+                if (CausymNodes.automatic()) {
                     zk.wait();
                 } else {
                     zk.wait(20);
@@ -1634,7 +1634,7 @@ public class Leader extends LearnerMaster {
             }
             if (ss.getCurrentEpoch() != -1) {
                 if (ss.isMoreRecentThan(leaderStateSummary)) {
-                    throw new @edu.uva.liftlab.graphchecker.annotation.CausynthExceptionTarget("zk-adhoc-06") IOException("Follower is ahead of the leader, leader summary: "
+                    throw new @edu.uva.liftlab.causym.annotation.CausymExceptionTarget("zk-adhoc-06") IOException("Follower is ahead of the leader, leader summary: "
                                           + leaderStateSummary.getCurrentEpoch()
                                           + " (current epoch), "
                                           + leaderStateSummary.getLastZxid()
