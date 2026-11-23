@@ -41,7 +41,7 @@ import java.util.concurrent.TimeoutException;
 import javax.management.MBeanServerConnection;
 import javax.management.ObjectName;
 import javax.net.ssl.SSLContext;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.PortAssignment;
 import org.apache.zookeeper.TestableZooKeeper;
@@ -232,8 +232,8 @@ public abstract class ClientBase extends ZKTestCase {
                 zk.close();
             }
         }
-        if (CausynthZkCluster.automatic()) {
-            CausynthNodes.openWindow(zk);
+        if (CausymZkCluster.automatic()) {
+            CausymNodes.openWindow(zk);
         }
 
         return zk;
@@ -274,13 +274,13 @@ public abstract class ClientBase extends ZKTestCase {
     }
 
     public static boolean waitForServerUp(String hp, long timeout, boolean secure, ZKConfig zkConfig) {
-        // GraphChecker: in a workload a wait the test needs to succeed, one of CONNECTION_TIMEOUT or more, never
-        // times out (CausynthNodes.NEVER_MS), as the servers' own waits: a replay that records the ensemble's start
+        // Causym: in a workload a wait the test needs to succeed, one of CONNECTION_TIMEOUT or more, never
+        // times out (CausymNodes.NEVER_MS), as the servers' own waits: a replay that records the ensemble's start
         // brings it up under the recorded order, on CloudLab's cores past the test's 30 s (zk-adhoc-06 and -12), and
         // the replay's own bound ends a run whose server never comes up. A shorter wait is a probe whose server may
         // stay down (ReadOnlyModeTest's 2000 ms) and keeps its bound.
-        if (CausynthZkCluster.automatic() && timeout >= CONNECTION_TIMEOUT) {
-            timeout = CausynthNodes.NEVER_MS;
+        if (CausymZkCluster.automatic() && timeout >= CONNECTION_TIMEOUT) {
+            timeout = CausymNodes.NEVER_MS;
         }
         long start = Time.currentElapsedTime();
         while (true) {
@@ -442,15 +442,15 @@ public abstract class ClientBase extends ZKTestCase {
         LOG.info("STARTING server instance 127.0.0.1:{}", port);
         ZooKeeperServer zks = new ZooKeeperServer(dataDir, dataDir, 3000);
         zks.setCreateSessionTrackerServerId(serverId);
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.configure(zks);
+        if (CausymZkCluster.automatic()) {
+            CausymZkCluster.configure(zks);
         }
         factory.startup(zks);
         assertTrue(
             ClientBase.waitForServerUp("127.0.0.1:" + port, CONNECTION_TIMEOUT, factory.isSecure(), zkConfig),
             "waiting for server up");
-        if (CausynthZkCluster.automatic()) {
-            CausynthZkCluster.registerServer(zks);
+        if (CausymZkCluster.automatic()) {
+            CausymZkCluster.registerServer(zks);
         }
     }
 
@@ -634,7 +634,7 @@ public abstract class ClientBase extends ZKTestCase {
     @AfterEach
     public void tearDown() throws Exception {
         LOG.info("tearDown starting");
-        CausynthNodes.endTest();
+        CausymNodes.endTest();
 
         tearDownAll();
 

@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocket;
-import org.apache.zookeeper.CausynthNodes;
+import org.apache.zookeeper.CausymNodes;
 import org.apache.zookeeper.common.ConfigException;
 import org.apache.zookeeper.common.NetUtils;
 import org.apache.zookeeper.common.X509Exception;
@@ -530,8 +530,8 @@ public class QuorumCnxManager {
 
             sw.start();
             rw.start();
-            // GraphChecker: a looking election sends again over the new connection.
-            CausynthNodes.electionWake(self);
+            // Causym: a looking election sends again over the new connection.
+            CausymNodes.electionWake(self);
 
             return true;
 
@@ -679,8 +679,8 @@ public class QuorumCnxManager {
 
             sw.start();
             rw.start();
-            // GraphChecker: a looking election sends again over the new connection.
-            CausynthNodes.electionWake(self);
+            // Causym: a looking election sends again over the new connection.
+            CausymNodes.electionWake(self);
         }
     }
 
@@ -1221,8 +1221,8 @@ public class QuorumCnxManager {
 
             senderWorkerMap.remove(sid, this);
             threadCnt.decrementAndGet();
-            // GraphChecker: a looking election sends again, so it reconnects to the peer it lost.
-            CausynthNodes.electionWake(self);
+            // Causym: a looking election sends again, so it reconnects to the peer it lost.
+            CausymNodes.electionWake(self);
             return running;
         }
 
@@ -1278,8 +1278,8 @@ public class QuorumCnxManager {
                     try {
                         BlockingQueue<ByteBuffer> bq = queueSendMap.get(sid);
                         if (bq != null) {
-                            // GraphChecker: an idle sender wakes only for a message.
-                            b = CausynthNodes.next(bq, 1000);
+                            // Causym: an idle sender wakes only for a message.
+                            b = CausymNodes.next(bq, 1000);
                         } else {
                             LOG.error("No queue of incoming messages for server {}", sid);
                             break;
@@ -1467,9 +1467,9 @@ public class QuorumCnxManager {
      *
      * {@link BlockingQueue#poll(long, java.util.concurrent.TimeUnit)}
      */
-    /** GraphChecker: the next message, waiting up to {@code ms}, or until one comes in a workload. */
+    /** Causym: the next message, waiting up to {@code ms}, or until one comes in a workload. */
     public Message nextRecv(long ms) throws InterruptedException {
-        return CausynthNodes.next(recvQueue, ms);
+        return CausymNodes.next(recvQueue, ms);
     }
 
     public Message pollRecvQueue(final long timeout, final TimeUnit unit)

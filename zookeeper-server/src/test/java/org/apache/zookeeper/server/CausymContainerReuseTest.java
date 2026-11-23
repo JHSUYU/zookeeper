@@ -23,34 +23,43 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.test.CausynthZkCluster;
+import org.apache.zookeeper.test.CausymZkCluster;
 import org.apache.zookeeper.test.ClientBase;
 import org.junit.jupiter.api.Test;
 
 /**
- * GraphChecker's workload of zk-inj-01: a container that lost its last child
- * is a cleanup candidate while a client gives it a new child and reads it.
+ * Causym's workload of zk-bugs-container-reuse: a container that lost
+ * its last child is a cleanup candidate while a client replaces it with a
+ * persistent node at the same path and reads it back.
  *
  * <p>ContainerManager#checkContainers picks the empty container as a
- * candidate and posts a deleteContainer request that names only its path.
- * The deletion runs {@link #POST_DELAY_MS} after the scan (the manager and its
- * one-worker pool are container-reuse's, {@link CausynthContainerReuseTest}),
- * so the recording has the client's create of the new child and its read of
- * the container inside the window, and the cleanup's deletion after the
- * read.  PrepRequestProcessor refuses to delete a container that has a child
- * when the request gets there; the case's world is the deletion before the
- * read, with the new child already made.</p>
+ * candidate and posts a deleteContainer request that names only its path;
+ * PrepRequestProcessor checks only that the node at the path has no children
+ * and is not an ephemeral, so it deletes whatever node holds the path when
+ * the request gets there.  The manager is the test's own, as
+ * CreateContainerTest's, and checks once.</p>
+ *
+ * <p>The manager submits a candidate's deletion through a pool of one
+ * worker on a {@link SynchronousQueue} and waits for it, so its check stays
+ * synchronous as upstream's and Causym can hold the submission where it
+ * runs.  The worker posts the deletion {@link #POST_DELAY_MS} after the scan:
+ * the window between the scan and the deletion's PrepRequestProcessor, which
+ * upstream leaves to the scheduler, is wide enough that the recording has the
+ * client's delete, create and read inside it, and the cleanup then deletes the
+ * replacement after the client's read.  The bug's world is that deletion
+ * before the read.</p>
  */
-public class CausynthContainerChildTest extends ClientBase {
+public class CausymContainerReuseTest extends ClientBase {
 
-    private static final String PATH = "/causynth-container";
+    private static final String PATH = "/causym-container";
     /** When the manager checks, after it starts. */
     private static final int CHECK_MS = 100;
     /** No wait between two candidates' deletions. */
     private static final int NO_PACING = Integer.MAX_VALUE;
-    /** When the client re-uses the container, after the manager starts: after its scan. */
+    /** When the client replaces the container, after the manager starts: after its scan. */
     private static final long AFTER_SCAN_MS = 1000;
     /** How long the worker waits after the scan before it posts a deletion. */
     private static final long POST_DELAY_MS = 3000;
@@ -58,21 +67,26 @@ public class CausynthContainerChildTest extends ClientBase {
     private static final long CHECKED_S = 30;
 
     @Test
-    public void readsAContainerThatGotANewChild() throws Exception {
+    public void keepsTheReplacementOfACleanedContainer() throws Exception {
         ZooKeeper zk = createClient();
         zk.create(PATH, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.CONTAINER);
-        zk.create(PATH + "/c1", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
-        zk.delete(PATH + "/c1", -1);
+        zk.create(PATH + "/child", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        zk.delete(PATH + "/child", -1);
 
         ZooKeeperServer server = serverFactory.getZooKeeperServer();
-        OneCheck cleanup = CausynthZkCluster.serverWork(server, () -> {
+        OneCheck cleanup = CausymZkCluster.serverWork(server, () -> {
             OneCheck manager = new OneCheck(server);
             manager.start();
             return manager;
         });
         try {
             Thread.sleep(AFTER_SCAN_MS);
-            zk.create(PATH + "/c2", new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+            try {
+                zk.delete(PATH, -1);
+            } catch (KeeperException.NoNodeException cleaned) {
+                // the cleanup's deletion came first
+            }
+            zk.create(PATH, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
             zk.getData(PATH, false, null);
             cleanup.checked.await(CHECKED_S, TimeUnit.SECONDS);
             // queued behind the cleanup's deletion: its reply means the deletion was applied
