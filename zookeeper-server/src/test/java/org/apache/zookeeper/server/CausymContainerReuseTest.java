@@ -26,12 +26,12 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.test.CausynthZkCluster;
+import org.apache.zookeeper.test.CausymZkCluster;
 import org.apache.zookeeper.test.ClientBase;
 import org.junit.jupiter.api.Test;
 
 /**
- * GraphChecker's workload of zk-bugs-container-reuse: a container that lost
+ * Causym's workload of zk-bugs-container-reuse: a container that lost
  * its last child is a cleanup candidate while a client replaces it with a
  * persistent node at the same path and reads it back.
  *
@@ -44,7 +44,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The manager submits a candidate's deletion through a pool of one
  * worker on a {@link SynchronousQueue} and waits for it, so its check stays
- * synchronous as upstream's and GraphChecker can hold the submission where it
+ * synchronous as upstream's and Causym can hold the submission where it
  * runs.  The worker posts the deletion {@link #POST_DELAY_MS} after the scan:
  * the window between the scan and the deletion's PrepRequestProcessor, which
  * upstream leaves to the scheduler, is wide enough that the recording has the
@@ -52,9 +52,9 @@ import org.junit.jupiter.api.Test;
  * replacement after the client's read.  The bug's world is that deletion
  * before the read.</p>
  */
-public class CausynthContainerReuseTest extends ClientBase {
+public class CausymContainerReuseTest extends ClientBase {
 
-    private static final String PATH = "/causynth-container";
+    private static final String PATH = "/causym-container";
     /** When the manager checks, after it starts. */
     private static final int CHECK_MS = 100;
     /** No wait between two candidates' deletions. */
@@ -74,7 +74,7 @@ public class CausynthContainerReuseTest extends ClientBase {
         zk.delete(PATH + "/child", -1);
 
         ZooKeeperServer server = serverFactory.getZooKeeperServer();
-        OneCheck cleanup = CausynthZkCluster.serverWork(server, () -> {
+        OneCheck cleanup = CausymZkCluster.serverWork(server, () -> {
             OneCheck manager = new OneCheck(server);
             manager.start();
             return manager;
